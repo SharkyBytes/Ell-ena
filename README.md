@@ -47,13 +47,9 @@ To ensure an intuitive and seamless user experience, I have designed the entire 
 
 If you want to take a closer look at the designs, check out this [Figma Design](https://www.figma.com/design/xhnMPzO8hrqXllGdEOCLZj/Ell-ena?node-id=0-1&t=07fZ8BhKPk4QLyw0-1).
 
-### Patient User Flow
+### User Flow
 
-![image](https://github.com/user-attachments/assets/574377d6-06d6-446c-8f2a-ae12ded061fb)
-
-### Doctor User Flow
-
-![image](https://github.com/user-attachments/assets/64b71fcb-201b-4c25-9d03-ed70fb1a7bc1)
+![image](https://github.com/user-attachments/assets/028110ee-47cf-4cc2-b25b-8d03eb68d221)
 
 
 ## Tech Stack
