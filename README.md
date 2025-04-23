@@ -51,6 +51,9 @@ If you want to take a closer look at the designs, check out this [Figma Design](
 
 ![image](https://github.com/user-attachments/assets/028110ee-47cf-4cc2-b25b-8d03eb68d221)
 
+### Working Prototype
+
+https://github.com/user-attachments/assets/6ab66711-c5dc-4855-9842-4ebea58d8031
 
 ## Tech Stack
 
