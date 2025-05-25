@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import 'onboarding/onboarding_screen.dart';
 import '../services/navigation_service.dart';
+import '../services/auth_service.dart';
 import 'home/home_screen.dart';
+import 'auth/login_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -16,6 +18,7 @@ class _SplashScreenState extends State<SplashScreen>
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<double> _scaleAnimation;
+  final AuthService _authService = AuthService();
 
   @override
   void initState() {
@@ -36,8 +39,26 @@ class _SplashScreenState extends State<SplashScreen>
     _animationController.forward();
 
     Timer(const Duration(seconds: 3), () {
-      NavigationService().navigateToReplacement(const OnboardingScreen());
+      _checkAuthStatus();
     });
+  }
+  
+  Future<void> _checkAuthStatus() async {
+    try {
+      final isLoggedIn = await _authService.isLoggedIn();
+      if (mounted) {
+        if (isLoggedIn) {
+          NavigationService().navigateToReplacement(const HomeScreen());
+        } else {
+          NavigationService().navigateToReplacement(const LoginScreen());
+        }
+      }
+    } catch (e) {
+      // If there's an error, redirect to login screen
+      if (mounted) {
+        NavigationService().navigateToReplacement(const LoginScreen());
+      }
+    }
   }
 
   @override

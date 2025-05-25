@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../widgets/custom_widgets.dart';
 import '../../services/navigation_service.dart';
+import '../../services/auth_service.dart';
 import '../home/home_screen.dart';
 import 'signup_screen.dart';
 import 'forgot_password_screen.dart';
@@ -21,6 +22,7 @@ class _LoginScreenState extends State<LoginScreen>
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
+  final AuthService _authService = AuthService();
 
   @override
   void initState() {
@@ -48,6 +50,20 @@ class _LoginScreenState extends State<LoginScreen>
     );
 
     _animationController.forward();
+    
+    // Check if user is already logged in
+    _checkLoggedInStatus();
+  }
+  
+  Future<void> _checkLoggedInStatus() async {
+    try {
+      final isLoggedIn = await _authService.isLoggedIn();
+      if (isLoggedIn && mounted) {
+        NavigationService().navigateToReplacement(const HomeScreen());
+      }
+    } catch (e) {
+      // Ignore errors during auto-login check
+    }
   }
 
   @override
@@ -64,11 +80,22 @@ class _LoginScreenState extends State<LoginScreen>
     setState(() => _isLoading = true);
 
     try {
-      // TODO: Implement actual login logic
-      await Future.delayed(const Duration(seconds: 2)); // Simulated delay
+      final result = await _authService.login(
+        email: _emailController.text,
+        password: _passwordController.text,
+      );
 
       if (mounted) {
-        NavigationService().navigateToReplacement(const HomeScreen());
+        if (result['success']) {
+          NavigationService().navigateToReplacement(const HomeScreen());
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result['error'] ?? 'Login failed'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
