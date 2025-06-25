@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../services/supabase_service.dart';
 import '../../services/navigation_service.dart';
 import '../auth/login_screen.dart';
+import 'team_members_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -401,6 +402,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildSettingsSection() {
+    final bool isAdmin = _userProfile?['role'] == 'admin';
+    final String teamId = _userProfile?['teams']?['team_code'] ?? '';
+    final String teamName = _userProfile?['teams']?['name'] ?? 'Your Team';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -440,6 +445,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 subtitle: 'Configure security settings',
                 iconColor: Colors.green.shade400,
               ),
+              // Only show Team Members option for admin users
+              if (isAdmin && teamId.isNotEmpty) ...[
+                const Divider(color: Colors.grey),
+                _buildSettingItem(
+                  icon: Icons.people_outline,
+                  title: 'Team Members',
+                  subtitle: 'Manage your team members',
+                  iconColor: Colors.purple.shade400,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => TeamMembersScreen(
+                          teamId: teamId,
+                          teamName: teamName,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
             ],
           ),
         ),
@@ -499,6 +525,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     required String title,
     required String subtitle,
     required Color iconColor,
+    VoidCallback? onTap,
   }) {
     return ListTile(
       leading: Container(
@@ -518,7 +545,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
       subtitle: Text(subtitle, style: TextStyle(color: Colors.grey.shade400)),
       trailing: const Icon(Icons.chevron_right, color: Colors.white70),
-      onTap: () {
+      onTap: onTap ?? () {
+        // Default implementation if no specific onTap is provided
         // TODO: Implement settings navigation
       },
     );
