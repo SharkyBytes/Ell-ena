@@ -83,9 +83,10 @@ class _SignupScreenState extends State<SignupScreen> {
                   if (value == null || value.isEmpty) {
                     return 'Please enter your email';
                   }
-                  if (!value.contains('@')) {
-                    return 'Please enter a valid email';
-                  }
+                 final emailRegex = RegExp(r'^[^@]+@[^@]+\.[^@]+$');
+                 if (!emailRegex.hasMatch(value)) {
+                   return 'Please enter a valid email';
+                }
                   return null;
                 },
               ),

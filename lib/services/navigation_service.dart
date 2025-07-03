@@ -8,7 +8,11 @@ class NavigationService {
   final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
   Future<dynamic> navigateTo(Widget screen) {
-    return navigatorKey.currentState!.push(
+    final navigator = navigatorKey.currentState;
+    if (navigator == null) {
+      throw StateError('Navigator not initialized');
+    }
+    return navigator.push(
       MaterialPageRoute(builder: (_) => screen),
     );
   }
@@ -20,6 +24,12 @@ class NavigationService {
   }
 
   void goBack() {
-    return navigatorKey.currentState!.pop();
+    final navigator = navigatorKey.currentState;
+    if (navigator == null) {
+      throw StateError('Navigator not initialized');
+    }
+    if (navigator.canPop()) {
+      navigator.pop();
+    }
   }
 }

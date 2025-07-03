@@ -69,13 +69,15 @@ class _VerifyOTPScreenState extends State<VerifyOTPScreen> {
                   ),
                 ),
                 onChanged: (value) {
-                  if (value.isNotEmpty) {
+                  if (value.isNotEmpty && index<3) {
                     if (index < 3) {
                       _focusNodes[index + 1].requestFocus();
                     } else {
                       _focusNodes[index].unfocus();
                       _handleVerification();
                     }
+                  } else if (value.isEmpty && index > 0) {
+                    _focusNodes[index - 1].requestFocus();
                   }
                 },
               ),
