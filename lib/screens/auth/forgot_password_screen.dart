@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../widgets/custom_widgets.dart';
 import '../../services/navigation_service.dart';
+import '../../services/supabase_service.dart';
 import 'verify_otp_screen.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
@@ -13,6 +14,8 @@ class ForgotPasswordScreen extends StatefulWidget {
 class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
+  final _supabaseService = SupabaseService();
+  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -20,10 +23,38 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     super.dispose();
   }
 
-  void _handleResetPassword() {
+  Future<void> _handleResetPassword() async {
     if (_formKey.currentState!.validate()) {
-      // TODO: Implement password reset logic
-      NavigationService().navigateTo(const VerifyOTPScreen());
+      setState(() => _isLoading = true);
+      
+      try {
+        // Request password reset email from Supabase
+        await _supabaseService.client.auth.resetPasswordForEmail(
+          _emailController.text,
+        );
+        
+        if (mounted) {
+          NavigationService().navigateTo(
+            VerifyOTPScreen(
+              email: _emailController.text,
+              verifyType: 'reset_password',
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(e.toString()),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      } finally {
+        if (mounted) {
+          setState(() => _isLoading = false);
+        }
+      }
     }
   }
 
@@ -54,7 +85,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               const SizedBox(height: 24),
               CustomButton(
                 text: 'Send Reset Code',
-                onPressed: _handleResetPassword,
+                onPressed: _isLoading ? null : _handleResetPassword,
+                isLoading: _isLoading,
               ),
               const SizedBox(height: 16),
               CustomButton(

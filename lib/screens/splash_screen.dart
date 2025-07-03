@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import 'onboarding/onboarding_screen.dart';
 import '../services/navigation_service.dart';
+import '../services/supabase_service.dart';
 import 'home/home_screen.dart';
+import 'auth/login_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -16,6 +18,7 @@ class _SplashScreenState extends State<SplashScreen>
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<double> _scaleAnimation;
+  final _supabaseService = SupabaseService();
 
   @override
   void initState() {
@@ -35,9 +38,30 @@ class _SplashScreenState extends State<SplashScreen>
 
     _animationController.forward();
 
+    // Check for existing session after animation completes
     Timer(const Duration(seconds: 3), () {
-      NavigationService().navigateToReplacement(const OnboardingScreen());
+      _checkSession();
     });
+  }
+  
+  Future<void> _checkSession() async {
+    try {
+      // Check if user is already logged in
+      final currentUser = _supabaseService.client.auth.currentUser;
+      
+      if (currentUser != null) {
+        // User is logged in, go directly to home screen
+        NavigationService().navigateToReplacement(const HomeScreen());
+      } else {
+        // No active session, go to login screen
+        // You can change this to OnboardingScreen if you want first-time users to see onboarding
+        NavigationService().navigateToReplacement(const LoginScreen());
+      }
+    } catch (e) {
+      debugPrint('Error checking session: $e');
+      // If there's an error, default to onboarding
+      NavigationService().navigateToReplacement(const OnboardingScreen());
+    }
   }
 
   @override
