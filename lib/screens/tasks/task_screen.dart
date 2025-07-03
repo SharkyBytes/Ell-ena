@@ -139,7 +139,7 @@ class _TaskScreenState extends State<TaskScreen> {
     required int total,
     required Color color,
   }) {
-    final percentage = (value / total * 100).round();
+   final percentage = total > 0 ? (value / total * 100).round() : 0;
     return Column(
       children: [
         Text(

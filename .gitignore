@@ -11,8 +11,6 @@
 .svn/
 .swiftpm/
 migrate_working_dir/
-.env
-
 
 # IntelliJ related
 *.iml
@@ -35,6 +33,13 @@ migrate_working_dir/
 .pub/
 /build/
 
+# Environment / credentials
+.env
+.env.*
+firebase*.json
+*.keystore
+*.jks
+fastlane/.env*
 # Symbolication related
 app.*.symbols
 
