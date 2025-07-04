@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../widgets/custom_widgets.dart';
 import '../../services/navigation_service.dart';
+import '../../services/supabase_service.dart';
 import '../home/home_screen.dart';
 import 'signup_screen.dart';
 import 'forgot_password_screen.dart';
@@ -21,6 +22,7 @@ class _LoginScreenState extends State<LoginScreen>
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
+  final _supabaseService = SupabaseService();
 
   @override
   void initState() {
@@ -64,11 +66,25 @@ class _LoginScreenState extends State<LoginScreen>
     setState(() => _isLoading = true);
 
     try {
-      // TODO: Implement actual login logic
-      await Future.delayed(const Duration(seconds: 2)); // Simulated delay
-
-      if (mounted) {
-        NavigationService().navigateToReplacement(const HomeScreen());
+      // Login with Supabase
+      final response = await _supabaseService.client.auth.signInWithPassword(
+        email: _emailController.text,
+        password: _passwordController.text,
+      );
+      
+      if (response.user != null) {
+        if (mounted) {
+          NavigationService().navigateToReplacement(const HomeScreen());
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Invalid email or password'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -105,9 +121,8 @@ class _LoginScreenState extends State<LoginScreen>
                       if (value == null || value.isEmpty) {
                         return 'Please enter your email';
                       }
-                      final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
-                      if (!emailRegex.hasMatch(value.trim())) {
-                        return 'Please enter a valid email address';
+                      if (!value.contains('@')) {
+                        return 'Please enter a valid email';
                       }
                       return null;
                     },
