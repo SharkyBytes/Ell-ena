@@ -474,4 +474,37 @@ class SupabaseService {
       };
     }
   }
+  
+  // Get all members of a specific team
+  Future<List<Map<String, dynamic>>> getTeamMembers(String teamId) async {
+    try {
+      if (!_isInitialized) return [];
+      
+      final user = _client.auth.currentUser;
+      if (user == null) return [];
+      
+      // First, get the UUID of the team from the team code
+      final teamResponse = await _client
+          .from('teams')
+          .select('id')
+          .eq('team_code', teamId)
+          .limit(1);
+      
+      if (teamResponse.isEmpty) return [];
+      
+      final teamIdUuid = teamResponse[0]['id'];
+      
+      // Then get all users in that team
+      final response = await _client
+          .from('users')
+          .select('*')
+          .eq('team_id', teamIdUuid)
+          .order('role', ascending: false); // Put admins first
+          
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      debugPrint('Error getting team members: $e');
+      return [];
+    }
+  }
 } 
