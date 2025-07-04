@@ -300,10 +300,17 @@ class SupabaseService {
         };
       }
       
-      // Verify the OTP token first
+      // Verify the OTP token based on the type
+      final OtpType otpType;
+      if (type == 'reset_password') {
+        otpType = OtpType.recovery;
+      } else {
+        otpType = OtpType.signup;
+      }
+      
       final response = await _client.auth.verifyOTP(
         token: token,
-        type: OtpType.signup,
+        type: otpType,
         email: email,
       );
       
@@ -433,6 +440,11 @@ class SupabaseService {
             'error': e.toString(),
           };
         }
+      } else if (type == 'reset_password') {
+        // For password reset, just return success
+        return {
+          'success': true,
+        };
       }
       
       // Default success response
@@ -449,7 +461,7 @@ class SupabaseService {
   }
   
   // Resend verification email
-  Future<Map<String, dynamic>> resendVerificationEmail(String email) async {
+  Future<Map<String, dynamic>> resendVerificationEmail(String email, {String type = 'signup'}) async {
     try {
       if (!_isInitialized) {
         return {
@@ -458,10 +470,18 @@ class SupabaseService {
         };
       }
       
-      await _client.auth.resend(
-        type: OtpType.email,
-        email: email,
-      );
+      final OtpType otpType;
+      if (type == 'reset_password') {
+        // For password reset, we need to call resetPasswordForEmail instead of resend
+        await _client.auth.resetPasswordForEmail(email);
+      } else {
+        // For signup and other types, use the resend method
+        otpType = type == 'signup' ? OtpType.signup : OtpType.email;
+        await _client.auth.resend(
+          type: otpType,
+          email: email,
+        );
+      }
       
       return {
         'success': true,

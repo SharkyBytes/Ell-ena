@@ -4,6 +4,7 @@ import '../../widgets/custom_widgets.dart';
 import '../../services/navigation_service.dart';
 import '../../services/supabase_service.dart';
 import '../home/home_screen.dart';
+import '../auth/set_new_password_screen.dart';
 
 class VerifyOTPScreen extends StatefulWidget {
   final String email;
@@ -71,17 +72,38 @@ class _VerifyOTPScreenState extends State<VerifyOTPScreen> {
             NavigationService().navigateToReplacement(const HomeScreen());
           } else if (widget.verifyType == 'reset_password') {
             // Navigate to reset password screen
-            // TODO: Implement reset password navigation
-            NavigationService().goBack();
+            NavigationService().navigateTo(
+              SetNewPasswordScreen(email: widget.email),
+            );
           }
         } else {
           setState(() {
-            _errorMessage = result['error'] ?? 'Verification failed';
+            String errorMsg = result['error'] ?? 'Verification failed';
+            
+            // Make the error message more user-friendly
+            if (errorMsg.contains('expired') || errorMsg.contains('otp_expired')) {
+              errorMsg = 'Verification code has expired. Please request a new code.';
+            } else if (errorMsg.contains('invalid')) {
+              errorMsg = 'Invalid verification code. Please try again.';
+            }
+            
+            _errorMessage = errorMsg;
           });
         }
       } catch (e) {
         setState(() {
-          _errorMessage = e.toString();
+          String errorMsg = e.toString();
+          
+          // Make the error message more user-friendly
+          if (errorMsg.contains('expired') || errorMsg.contains('otp_expired')) {
+            errorMsg = 'Verification code has expired. Please request a new code.';
+          } else if (errorMsg.contains('invalid')) {
+            errorMsg = 'Invalid verification code. Please try again.';
+          } else {
+            errorMsg = 'An error occurred. Please try again.';
+          }
+          
+          _errorMessage = errorMsg;
         });
       } finally {
         if (mounted) {
@@ -100,7 +122,10 @@ class _VerifyOTPScreenState extends State<VerifyOTPScreen> {
     });
 
     try {
-      final result = await _supabaseService.resendVerificationEmail(widget.email);
+      final result = await _supabaseService.resendVerificationEmail(
+        widget.email,
+        type: widget.verifyType,
+      );
       
       if (result['success']) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -111,12 +136,34 @@ class _VerifyOTPScreenState extends State<VerifyOTPScreen> {
         );
       } else {
         setState(() {
-          _errorMessage = result['error'] ?? 'Failed to resend code';
+          String errorMsg = result['error'] ?? 'Failed to resend code';
+          
+          // Make the error message more user-friendly
+          if (errorMsg.contains('Rate limit')) {
+            errorMsg = 'Too many attempts. Please try again later.';
+          } else if (errorMsg.contains('not found') || errorMsg.contains('Invalid email')) {
+            errorMsg = 'Email address not found or invalid.';
+          }
+          
+          _errorMessage = errorMsg;
         });
       }
     } catch (e) {
       setState(() {
-        _errorMessage = e.toString();
+        String errorMsg = e.toString();
+        
+        // Make the error message more user-friendly
+        if (errorMsg.contains('Rate limit')) {
+          errorMsg = 'Too many attempts. Please try again later.';
+        } else if (errorMsg.contains('not found') || errorMsg.contains('Invalid email')) {
+          errorMsg = 'Email address not found or invalid.';
+        } else if (errorMsg.contains('Assertion failed')) {
+          errorMsg = 'Unable to resend code. Please go back and try again.';
+        } else {
+          errorMsg = 'An error occurred. Please try again.';
+        }
+        
+        _errorMessage = errorMsg;
       });
     } finally {
       if (mounted) {
