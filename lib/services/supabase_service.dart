@@ -27,10 +27,10 @@ class SupabaseService {
       });
       
       // Get values from .env or use placeholder values for development
-      final supabaseUrl = dotenv.env['SUPABASE_URL'] ?? 'https://vcyzvymahcfmfjfzaebm.supabase.co';
-      final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'] ?? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZjeXp2eW1haGNmbWZqZnphZWJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk3NjE5NjcsImV4cCI6MjA2NTMzNzk2N30.sXv-IIbPrL1CZD0HRAPWPAP8Wk4ZhyT9aiWZW1Wp6w0';
+      final supabaseUrl = dotenv.env['SUPABASE_URL'] ?? '';
+      final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'] ?? '';
       
-      await Supabase.initialize(
+      await Supabase.initialize(  
         url: supabaseUrl,
         anonKey: supabaseAnonKey,
       );
@@ -39,7 +39,7 @@ class SupabaseService {
     } catch (e) {
       debugPrint('Error initializing Supabase: $e');
       rethrow;
-    }
+    } 
   }
   
   SupabaseClient get client => _client;
@@ -52,7 +52,7 @@ class SupabaseService {
   }
   
   // Create a new team with the generated team ID
-  Future<Map<String, dynamic>> createTeam({
+  Future<Map<String, dynamic>> createTeam({ 
     required String teamName,
     required String adminName,
     required String adminEmail,
@@ -110,7 +110,7 @@ class SupabaseService {
         'team_code': teamId,
         'created_by': userId,
         'admin_name': adminName,
-        'admin_email': adminEmail,
+        'admin_email': adminEmail,  
       }).select();
       
       final teamResponse = teamInsertResponse.isNotEmpty ? teamInsertResponse.first : null;
@@ -182,7 +182,7 @@ class SupabaseService {
           'success': false,
           'error': 'Team not found',
         };
-      }
+      } 
       
       final teamIdUuid = teamResponse[0]['id'];
       
@@ -267,7 +267,7 @@ class SupabaseService {
       final user = _client.auth.currentUser;
       if (user == null) return false;
       
-      await _client
+      await _client 
           .from('users')
           .update(data)
           .eq('id', user.id);
@@ -453,7 +453,7 @@ class SupabaseService {
     try {
       if (!_isInitialized) {
         return {
-          'success': false,
+          'success': false, 
           'error': 'Supabase is not initialized',
         };
       }
@@ -507,4 +507,4 @@ class SupabaseService {
       return [];
     }
   }
-} 
+}     
