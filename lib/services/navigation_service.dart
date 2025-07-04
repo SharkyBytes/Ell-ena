@@ -18,7 +18,11 @@ class NavigationService {
   }
 
   Future<dynamic> navigateToReplacement(Widget screen) {
-    return navigatorKey.currentState!.pushReplacement(
+    final navigator = navigatorKey.currentState;
+    if (navigator == null) {
+      throw StateError('Navigator not initialized');
+    }
+    return navigator.pushReplacement(
       MaterialPageRoute(builder: (_) => screen),
     );
   }
