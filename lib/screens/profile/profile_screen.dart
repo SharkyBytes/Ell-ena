@@ -27,13 +27,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _isLoading = true;
     });
 
-    final profile = await _supabaseService.getCurrentUserProfile();
-    
-    if (mounted) {
-      setState(() {
-        _userProfile = profile;
-        _isLoading = false;
-      });
+    try {
+      final profile = await _supabaseService.getCurrentUserProfile();
+
+      if (mounted) {
+        setState(() {
+          _userProfile = profile;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to load profile: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
   

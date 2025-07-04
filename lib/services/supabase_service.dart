@@ -29,6 +29,10 @@ class SupabaseService {
       // Get values from .env or use placeholder values for development
       final supabaseUrl = dotenv.env['SUPABASE_URL'] ?? '';
       final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'] ?? '';
+
+        if (supabaseUrl.isEmpty || supabaseAnonKey.isEmpty) {
+        throw Exception('Missing required Supabase configuration. Please check your .env file.');
+      }
       
       await Supabase.initialize(  
         url: supabaseUrl,
@@ -110,7 +114,7 @@ class SupabaseService {
         'team_code': teamId,
         'created_by': userId,
         'admin_name': adminName,
-        'admin_email': adminEmail,  
+        'admin_email': adminEmail,
       }).select();
       
       final teamResponse = teamInsertResponse.isNotEmpty ? teamInsertResponse.first : null;
@@ -137,7 +141,7 @@ class SupabaseService {
       debugPrint('Error creating team: $e');
       return {
         'success': false,
-        'error': e.toString(),
+        'error': 'Failed to create team. Please try again.',
       };
     }
   }
@@ -182,7 +186,7 @@ class SupabaseService {
           'success': false,
           'error': 'Team not found',
         };
-      } 
+      }
       
       final teamIdUuid = teamResponse[0]['id'];
       
@@ -267,7 +271,7 @@ class SupabaseService {
       final user = _client.auth.currentUser;
       if (user == null) return false;
       
-      await _client 
+      await _client
           .from('users')
           .update(data)
           .eq('id', user.id);
@@ -527,4 +531,382 @@ class SupabaseService {
       return [];
     }
   }
-}     
+  
+  // Task-related methods
+  
+  // Get tasks for the current user's team
+  Future<List<Map<String, dynamic>>> getTasks() async {
+    try {
+      if (!_isInitialized) return [];
+      
+      final user = _client.auth.currentUser;
+      if (user == null) return [];
+      
+      // Get the user's team ID
+      final userProfile = await getCurrentUserProfile();
+      if (userProfile == null || userProfile['team_id'] == null) return [];
+      
+      final teamId = userProfile['team_id'];
+      
+      // Get all tasks for this team with creator and assignee info
+      final response = await _client
+          .from('tasks')
+          .select('*')
+          .eq('team_id', teamId)
+          .order('created_at', ascending: false);
+      
+      // Process the response to make it compatible with existing code
+      final List<Map<String, dynamic>> processedTasks = [];
+      for (var task in response) {
+        final Map<String, dynamic> processedTask = {...task};
+        
+        // Add creator info in the expected format
+        if (task['created_by_user'] != null) {
+          processedTask['creator'] = {
+            'id': task['created_by_user']['id'],
+            'full_name': task['created_by_user']['full_name'],
+          };
+        }
+        
+        // Add assignee info in the expected format
+        if (task['assigned_to_user'] != null) {
+          processedTask['assignee'] = {
+            'id': task['assigned_to_user']['id'],
+            'full_name': task['assigned_to_user']['full_name'],
+          };
+        }
+        
+        // Remove the raw join fields
+        processedTask.remove('created_by_user');
+        processedTask.remove('assigned_to_user');
+        
+        processedTasks.add(processedTask);
+      }
+          
+      return processedTasks;
+    } catch (e) {
+      debugPrint('Error getting tasks: $e');
+      return [];
+    }
+  }
+  
+  // Create a new task
+  Future<Map<String, dynamic>> createTask({
+    required String title,
+    String? description,
+    DateTime? dueDate,
+    String? assignedToUserId,
+  }) async {
+    try {
+      if (!_isInitialized) {
+        return {
+          'success': false,
+          'error': 'Supabase is not initialized',
+        };
+      }
+      
+      final user = _client.auth.currentUser;
+      if (user == null) {
+        return {
+          'success': false,
+          'error': 'User not authenticated',
+        };
+      }
+      
+      // Get the user's team ID
+      final userProfile = await getCurrentUserProfile();
+      if (userProfile == null || userProfile['team_id'] == null) {
+        return {
+          'success': false,
+          'error': 'User not associated with a team',
+        };
+      }
+      
+      final teamId = userProfile['team_id'];
+      
+      // Create the task
+      final Map<String, dynamic> taskData = {
+        'title': title,
+        'description': description,
+        'status': 'todo',
+        'approval_status': 'pending',
+        'team_id': teamId,
+        'created_by': user.id,
+      };
+      
+      if (assignedToUserId != null && assignedToUserId.isNotEmpty) {
+        taskData['assigned_to'] = assignedToUserId;
+      }
+      
+      if (dueDate != null) {
+        taskData['due_date'] = dueDate.toIso8601String();
+      }
+      
+      final response = await _client
+          .from('tasks')
+          .insert(taskData)
+          .select();
+          
+      if (response.isEmpty) {
+        return {
+          'success': false,
+          'error': 'Failed to create task',
+        };
+      }
+      
+      return {
+        'success': true,
+        'task': response[0],
+      };
+    } catch (e) {
+      debugPrint('Error creating task: $e');
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
+    }
+  }
+  
+  // Update a task's status
+  Future<Map<String, dynamic>> updateTaskStatus({
+    required String taskId,
+    required String status,
+  }) async {
+    try {
+      if (!_isInitialized) {
+        return {
+          'success': false,
+          'error': 'Supabase is not initialized',
+        };
+      }
+      
+      final user = _client.auth.currentUser;
+      if (user == null) {
+        return {
+          'success': false,
+          'error': 'User not authenticated',
+        };
+      }
+      
+      // Update the task status
+      await _client
+          .from('tasks')
+          .update({'status': status})
+          .eq('id', taskId);
+          
+      return {
+        'success': true,
+      };
+    } catch (e) {
+      debugPrint('Error updating task status: $e');
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
+    }
+  }
+  
+  // Update a task's approval status (admin only)
+  Future<Map<String, dynamic>> updateTaskApproval({
+    required String taskId,
+    required String approvalStatus,
+  }) async {
+    try {
+      if (!_isInitialized) {
+        return {
+          'success': false,
+          'error': 'Supabase is not initialized',
+        };
+      }
+      
+      final user = _client.auth.currentUser;
+      if (user == null) {
+        return {
+          'success': false,
+          'error': 'User not authenticated',
+        };
+      }
+      
+      // Check if user is admin
+      final userProfile = await getCurrentUserProfile();
+      if (userProfile == null || userProfile['role'] != 'admin') {
+        return {
+          'success': false,
+          'error': 'Only admins can approve tasks',
+        };
+      }
+      
+      // Update the task approval status
+      await _client
+          .from('tasks')
+          .update({'approval_status': approvalStatus})
+          .eq('id', taskId);
+          
+      return {
+        'success': true,
+      };
+    } catch (e) {
+      debugPrint('Error updating task approval: $e');
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
+    }
+  }
+  
+  // Get task details with comments
+  Future<Map<String, dynamic>?> getTaskDetails(String taskId) async {
+    try {
+      if (!_isInitialized) return null;
+      
+      final user = _client.auth.currentUser;
+      if (user == null) return null;
+      
+      // Get task details
+      final taskResponse = await _client
+          .from('tasks')
+          .select('*')
+          .eq('id', taskId)
+          .single();
+      
+      // Get task comments
+      final commentsResponse = await _client
+          .from('task_comments')
+          .select('*')
+          .eq('task_id', taskId)
+          .order('created_at', ascending: true);
+          
+      // Get creator and assignee info
+      String? createdById = taskResponse['created_by'];
+      String? assignedToId = taskResponse['assigned_to'];
+      
+      Map<String, dynamic>? creator;
+      Map<String, dynamic>? assignee;
+      
+      if (createdById != null) {
+        final creatorResponse = await _client
+            .from('users')
+            .select('id, full_name')
+            .eq('id', createdById)
+            .maybeSingle();
+        
+        if (creatorResponse != null) {
+          creator = creatorResponse;
+        }
+      }
+      
+      if (assignedToId != null) {
+        final assigneeResponse = await _client
+            .from('users')
+            .select('id, full_name')
+            .eq('id', assignedToId)
+            .maybeSingle();
+        
+        if (assigneeResponse != null) {
+          assignee = assigneeResponse;
+        }
+      }
+      
+      // Get comment user info
+      List<Map<String, dynamic>> commentsWithUsers = [];
+      for (var comment in commentsResponse) {
+        String? userId = comment['user_id'];
+        Map<String, dynamic>? user;
+        
+        if (userId != null) {
+          final userResponse = await _client
+              .from('users')
+              .select('id, full_name')
+              .eq('id', userId)
+              .maybeSingle();
+          
+          if (userResponse != null) {
+            user = userResponse;
+          }
+        }
+        
+        commentsWithUsers.add({
+          ...comment,
+          'user': user,
+        });
+      }
+      
+      Map<String, dynamic> taskWithDetails = {
+        ...taskResponse,
+        'creator': creator,
+        'assignee': assignee,
+      };
+          
+      return {
+        'task': taskWithDetails,
+        'comments': commentsWithUsers,
+      };
+    } catch (e) {
+      debugPrint('Error getting task details: $e');
+      return null;
+    }
+  }
+  
+  // Add a comment to a task
+  Future<Map<String, dynamic>> addTaskComment({
+    required String taskId,
+    required String content,
+  }) async {
+    try {
+      if (!_isInitialized) {
+        return {
+          'success': false,
+          'error': 'Supabase is not initialized',
+        };
+      }
+      
+      final user = _client.auth.currentUser;
+      if (user == null) {
+        return {
+          'success': false,
+          'error': 'User not authenticated',
+        };
+      }
+      
+      // Add the comment
+      final response = await _client
+          .from('task_comments')
+          .insert({
+            'task_id': taskId,
+            'user_id': user.id,
+            'content': content,
+          })
+          .select();
+          
+      if (response.isEmpty) {
+        return {
+          'success': false,
+          'error': 'Failed to add comment',
+        };
+      }
+      
+      // Get user info
+      final userResponse = await _client
+          .from('users')
+          .select('id, full_name')
+          .eq('id', user.id)
+          .maybeSingle();
+      
+      final commentWithUser = {
+        ...response[0],
+        'user': userResponse,
+      };
+          
+      return {
+        'success': true,
+        'comment': commentWithUser,
+      };
+    } catch (e) {
+      debugPrint('Error adding task comment: $e');
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
+    }
+  }
+} 
