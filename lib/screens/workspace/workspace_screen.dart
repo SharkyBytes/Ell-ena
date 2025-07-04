@@ -3,6 +3,7 @@ import '../tasks/task_screen.dart';
 import '../tasks/create_task_screen.dart';
 import '../tickets/ticket_screen.dart';
 import '../chat/chat_screen.dart';
+import '../../services/supabase_service.dart';
 
 class WorkspaceScreen extends StatefulWidget {
   const WorkspaceScreen({super.key});
@@ -55,8 +56,15 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
       MaterialPageRoute(
         builder: (context) => const CreateTaskScreen(),
       ),
-    ).then((result) {
+    ).then((result) async {
       if (result == true) {
+        // Reload team members cache first
+        final supabaseService = SupabaseService();
+        final userProfile = await supabaseService.getCurrentUserProfile();
+        if (userProfile != null && userProfile['team_id'] != null) {
+          await supabaseService.loadTeamMembers(userProfile['team_id']);
+        }
+        
         // Force refresh of the task screen
         TaskScreen.refreshTasks();
         

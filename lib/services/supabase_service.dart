@@ -8,6 +8,10 @@ class SupabaseService {
   late final SupabaseClient _client;
   bool _isInitialized = false;
   
+  // Cache for team members to avoid repeated network calls
+  List<Map<String, dynamic>> _teamMembersCache = [];
+  String? _currentTeamId;
+  
   factory SupabaseService() {
     return _instance;
   }
@@ -15,6 +19,9 @@ class SupabaseService {
   SupabaseService._internal();
   
   bool get isInitialized => _isInitialized;
+  
+  // Getter for team members cache
+  List<Map<String, dynamic>> get teamMembersCache => _teamMembersCache;
   
   Future<void> initialize() async {
     if (_isInitialized) return;
@@ -40,10 +47,73 @@ class SupabaseService {
       );
       _client = Supabase.instance.client;
       _isInitialized = true;
+      
+      // Load team members after initialization if user is logged in
+      await _loadTeamMembersIfLoggedIn();
     } catch (e) {
       debugPrint('Error initializing Supabase: $e');
       rethrow;
     } 
+  }
+  
+  // Load team members if user is logged in
+  Future<void> _loadTeamMembersIfLoggedIn() async {
+    try {
+      final user = _client.auth.currentUser;
+      if (user != null) {
+        final userProfile = await getCurrentUserProfile();
+        if (userProfile != null && userProfile['team_id'] != null) {
+          final teamId = userProfile['team_id'];
+          await loadTeamMembers(teamId);
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading team members on init: $e');
+    }
+  }
+  
+  // Load team members and cache them
+  Future<void> loadTeamMembers(String teamId) async {
+    try {
+      if (!_isInitialized) return;
+      
+      // Skip if we already have this team's members cached
+      if (_currentTeamId == teamId && _teamMembersCache.isNotEmpty) {
+        return;
+      }
+      
+      final response = await _client
+          .from('users')
+          .select('id, full_name, email, role')
+          .eq('team_id', teamId)
+          .order('role', ascending: false); // Put admins first
+          
+      _teamMembersCache = List<Map<String, dynamic>>.from(response);
+      _currentTeamId = teamId;
+      
+      debugPrint('Team members loaded: ${_teamMembersCache.length}');
+    } catch (e) {
+      debugPrint('Error loading team members: $e');
+    }
+  }
+  
+  // Get user name from cache by ID
+  String getUserNameById(String userId) {
+    try {
+      final member = _teamMembersCache.firstWhere(
+        (member) => member['id'] == userId,
+        orElse: () => {'full_name': 'Team Member'},
+      );
+      return member['full_name'];
+    } catch (e) {
+      return 'Team Member';
+    }
+  }
+  
+  // Check if the user ID is the current user
+  bool isCurrentUser(String userId) {
+    final currentUserId = _client.auth.currentUser?.id;
+    return currentUserId != null && currentUserId == userId;
   }
   
   SupabaseClient get client => _client;

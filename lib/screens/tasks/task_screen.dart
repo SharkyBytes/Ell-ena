@@ -28,13 +28,39 @@ class _TaskScreenState extends State<TaskScreen> {
   @override
   void initState() {
     super.initState();
-    _loadTasks();
+    _loadTeamMembersAndTasks();
     _checkUserRole();
   }
   
   // This method can be called from outside to refresh tasks
   void refreshTasks() {
-    _loadTasks();
+    _loadTeamMembersAndTasks();
+  }
+  
+  // Load team members first, then tasks
+  Future<void> _loadTeamMembersAndTasks() async {
+    try {
+      setState(() {
+        _isLoading = true;
+      });
+      
+      // Get the user's team ID
+      final userProfile = await _supabaseService.getCurrentUserProfile();
+      if (userProfile != null && userProfile['team_id'] != null) {
+        // Load team members first
+        await _supabaseService.loadTeamMembers(userProfile['team_id']);
+      }
+      
+      // Then load tasks
+      await _loadTasks();
+    } catch (e) {
+      debugPrint('Error loading team members and tasks: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
   
   Future<void> _checkUserRole() async {
@@ -47,10 +73,6 @@ class _TaskScreenState extends State<TaskScreen> {
   }
   
   Future<void> _loadTasks() async {
-    setState(() {
-      _isLoading = true;
-    });
-    
     try {
       final tasks = await _supabaseService.getTasks();
       
@@ -510,30 +532,25 @@ class _TaskCard extends StatelessWidget {
     final String status = task['status'] ?? 'todo';
     final String approvalStatus = task['approval_status'] ?? 'pending';
     
-    // Handle creator and assignee names - using direct user IDs if creator/assignee objects aren't available
+    // Get names from the team members cache
+    final supabaseService = SupabaseService();
     String creatorName;
-    if (task['creator'] != null && task['creator']['full_name'] != null) {
-      creatorName = task['creator']['full_name'];
-    } else {
-      // Try to get creator name from the current user if it matches
-      final currentUserId = SupabaseService().client.auth.currentUser?.id;
-      if (currentUserId != null && currentUserId == task['created_by']) {
+    if (task['created_by'] != null) {
+      if (supabaseService.isCurrentUser(task['created_by'])) {
         creatorName = 'You';
       } else {
-        creatorName = 'Team Member';
+        creatorName = supabaseService.getUserNameById(task['created_by']);
       }
+    } else {
+      creatorName = 'Unknown';
     }
     
     String assigneeName;
-    if (task['assignee'] != null && task['assignee']['full_name'] != null) {
-      assigneeName = task['assignee']['full_name'];
-    } else if (task['assigned_to'] != null) {
-      // Try to get assignee name from the current user if it matches
-      final currentUserId = SupabaseService().client.auth.currentUser?.id;
-      if (currentUserId != null && currentUserId == task['assigned_to']) {
+    if (task['assigned_to'] != null) {
+      if (supabaseService.isCurrentUser(task['assigned_to'])) {
         assigneeName = 'You';
       } else {
-        assigneeName = 'Team Member';
+        assigneeName = supabaseService.getUserNameById(task['assigned_to']);
       }
     } else {
       assigneeName = 'Unassigned';
