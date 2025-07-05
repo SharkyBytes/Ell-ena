@@ -38,7 +38,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
     
     try {
       final userProfile = await _supabaseService.getCurrentUserProfile();
-      if (userProfile != null && userProfile['teams'] != null) {
+      if (userProfile != null && userProfile['teams'] != null && userProfile['teams']['team_code'] != null) {
         final teamId = userProfile['teams']['team_code'];
         final members = await _supabaseService.getTeamMembers(teamId);
         
@@ -314,8 +314,8 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                                       radius: 12,
                                       backgroundColor: Colors.green.shade700,
                                       child: Text(
-                                        member['full_name'].isNotEmpty
-                                            ? member['full_name'][0].toUpperCase()
+                                        (member['full_name'] != null && member['full_name'].toString().isNotEmpty)
+                                            ? member['full_name'].toString()[0].toUpperCase()
                                             : '?',
                                         style: const TextStyle(
                                           fontSize: 12,
@@ -325,7 +325,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                                       ),
                                     ),
                                     const SizedBox(width: 8),
-                                    Text(member['full_name']),
+                                      Text(member['full_name']?.toString() ?? 'Unknown'),
                                     if (member['role'] == 'admin')
                                       Container(
                                         margin: const EdgeInsets.only(left: 8),
