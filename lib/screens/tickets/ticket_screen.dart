@@ -513,11 +513,14 @@ class _TicketCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final String title = ticket['title'] ?? 'Untitled Ticket';
     final String description = ticket['description'] ?? 'No description';
+    // Limit description to 75 words
+    final String limitedDescription = _limitWords(description, 75);
     final String status = ticket['status'] ?? 'open';
     final String priority = ticket['priority'] ?? 'medium';
     final String category = ticket['category'] ?? 'Bug';
     final String approvalStatus = ticket['approval_status'] ?? 'pending';
     final String ticketNumber = ticket['ticket_number'] ?? 'TKT-???';
+    final String createdAt = _formatDate(ticket['created_at']);
     
     // Get names from the team members cache
     final supabaseService = SupabaseService();
@@ -534,20 +537,50 @@ class _TicketCard extends StatelessWidget {
       creatorName = 'Unknown';
     }
     
-    // Determine colors based on priority
+    // Determine colors and icons based on priority
     Color priorityColor;
+    IconData priorityIcon;
     switch (priority.toLowerCase()) {
       case 'high':
         priorityColor = Colors.red.shade400;
+        priorityIcon = Icons.priority_high;
         break;
       case 'medium':
         priorityColor = Colors.orange.shade400;
+        priorityIcon = Icons.remove_circle_outline;
         break;
       case 'low':
         priorityColor = Colors.green.shade400;
+        priorityIcon = Icons.arrow_downward;
         break;
       default:
         priorityColor = Colors.grey;
+        priorityIcon = Icons.help_outline;
+    }
+    
+    // Determine category icon
+    IconData categoryIcon;
+    switch (category.toLowerCase()) {
+      case 'bug':
+        categoryIcon = Icons.bug_report;
+        break;
+      case 'feature request':
+        categoryIcon = Icons.lightbulb_outline;
+        break;
+      case 'ui/ux':
+        categoryIcon = Icons.design_services;
+        break;
+      case 'performance':
+        categoryIcon = Icons.speed;
+        break;
+      case 'documentation':
+        categoryIcon = Icons.description;
+        break;
+      case 'security':
+        categoryIcon = Icons.security;
+        break;
+      default:
+        categoryIcon = Icons.category;
     }
     
     // Determine colors based on approval status
@@ -590,7 +623,7 @@ class _TicketCard extends StatelessWidget {
                   Row(
                     children: [
                       Icon(
-                        Icons.flag,
+                        priorityIcon,
                         color: priorityColor,
                         size: 20,
                       ),
@@ -628,7 +661,7 @@ class _TicketCard extends StatelessWidget {
                           ],
                         ),
                       Text(
-                        ticketNumber,
+                        createdAt,
                         style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
                       ),
                     ],
@@ -641,6 +674,15 @@ class _TicketCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Text(
+                    ticketNumber,
+                    style: TextStyle(
+                      color: Colors.grey.shade500,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -673,7 +715,7 @@ class _TicketCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    description,
+                    limitedDescription,
                     style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
@@ -688,13 +730,23 @@ class _TicketCard extends StatelessWidget {
                           color: Colors.purple.withOpacity(0.2),
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: Text(
-                          category,
-                          style: TextStyle(
-                            color: Colors.purple.shade300,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              categoryIcon,
+                              color: Colors.purple.shade300,
+                              size: 14,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              category,
+                              style: TextStyle(
+                                color: Colors.purple.shade300,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                       Row(
@@ -759,5 +811,25 @@ class _TicketCard extends StatelessWidget {
         ),
       ),
     );
+  }
+  
+  String _formatDate(String? dateString) {
+    if (dateString == null) return '';
+    
+    try {
+      final date = DateTime.parse(dateString);
+      return '${date.day}/${date.month}/${date.year}';
+    } catch (e) {
+      return '';
+    }
+  }
+  
+  String _limitWords(String text, int wordLimit) {
+    if (text.isEmpty) return text;
+    
+    final words = text.split(' ');
+    if (words.length <= wordLimit) return text;
+    
+    return '${words.take(wordLimit).join(' ')}...';
   }
 }
