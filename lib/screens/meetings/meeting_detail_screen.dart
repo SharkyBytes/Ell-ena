@@ -382,7 +382,7 @@ class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
               _meeting!['meeting_number'] ?? 'MTG-???',
               style: TextStyle(
                 color: Colors.grey.shade400,
-                fontSize: 14,
+                fontSize: 12,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -408,7 +408,7 @@ class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
                     isUpcoming ? 'UPCOMING' : 'PAST',
                     style: TextStyle(
                       color: isUpcoming ? Colors.green.shade400 : Colors.grey.shade600,
-                      fontSize: 12,
+                      fontSize: 10,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -424,7 +424,7 @@ class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
           _meeting!['title'] ?? 'Untitled Meeting',
           style: const TextStyle(
             color: Colors.white,
-            fontSize: 24,
+            fontSize: 20,
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -455,7 +455,7 @@ class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
                           'Date',
                           style: TextStyle(
                             color: Colors.grey.shade400,
-                            fontSize: 14,
+                            fontSize: 12,
                           ),
                         ),
                         const SizedBox(height: 4),
@@ -463,7 +463,7 @@ class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
                           dateFormat.format(meetingDateTime),
                           style: const TextStyle(
                             color: Colors.white,
-                            fontSize: 16,
+                            fontSize: 14,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -489,7 +489,7 @@ class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
                           'Time',
                           style: TextStyle(
                             color: Colors.grey.shade400,
-                            fontSize: 14,
+                            fontSize: 12,
                           ),
                         ),
                         const SizedBox(height: 4),
@@ -497,7 +497,7 @@ class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
                           timeFormat.format(meetingDateTime),
                           style: const TextStyle(
                             color: Colors.white,
-                            fontSize: 16,
+                            fontSize: 14,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -538,7 +538,7 @@ class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
                       'Meeting Link',
                       style: TextStyle(
                         color: Colors.blue,
-                        fontSize: 16,
+                        fontSize: 14,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -570,7 +570,7 @@ class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
                       icon: const Icon(Icons.open_in_new, color: Colors.white),
                       label: const Text(
                         'Join Meeting',
-                        style: TextStyle(color: Colors.white),
+                        style: TextStyle(color: Colors.white, fontSize: 13),
                       ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.blue,
@@ -599,7 +599,7 @@ class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
                   'Description',
                   style: TextStyle(
                     color: Colors.grey.shade400,
-                    fontSize: 16,
+                    fontSize: 14,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -608,7 +608,7 @@ class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
                   _meeting!['description'],
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 16,
+                    fontSize: 14,
                   ),
                 ),
               ],
@@ -644,7 +644,7 @@ class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
                       'Meeting Transcription',
                       style: TextStyle(
                         color: Colors.purple,
-                        fontSize: 16,
+                        fontSize: 14,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -691,7 +691,7 @@ class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
                       'AI Summary',
                       style: TextStyle(
                         color: Colors.teal,
-                        fontSize: 16,
+                        fontSize: 14,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -744,7 +744,7 @@ class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
                         'Created by',
                         style: TextStyle(
                           color: Colors.grey.shade400,
-                          fontSize: 14,
+                          fontSize: 12,
                         ),
                       ),
                       const SizedBox(height: 4),
@@ -752,7 +752,7 @@ class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
                         _meeting!['creator']['full_name'] ?? 'Unknown',
                         style: const TextStyle(
                           color: Colors.white,
-                          fontSize: 16,
+                          fontSize: 14,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
