@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../services/supabase_service.dart';
 import 'create_meeting_screen.dart';
 import 'meeting_detail_screen.dart';
@@ -91,6 +92,36 @@ class _MeetingScreenState extends State<MeetingScreen> {
       }
     }
   }
+  
+  Future<void> _launchMeetingUrl(String? url) async {
+    if (url == null || url.isEmpty) return;
+    
+    try {
+      final Uri uri = Uri.parse(url);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Could not launch meeting URL'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Error launching URL: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error launching URL: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -150,7 +181,7 @@ class _MeetingScreenState extends State<MeetingScreen> {
             upcomingCount: upcomingCount,
             pastCount: pastCount,
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           _buildFilterTabs(),
           Expanded(
             child: _buildMeetingList(filteredMeetings),
@@ -165,10 +196,10 @@ class _MeetingScreenState extends State<MeetingScreen> {
     required int pastCount,
   }) {
     return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: const BoxDecoration(
-        color: Color(0xFF2D2D2D),
-        borderRadius: BorderRadius.only(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.green.shade400.withOpacity(0.2),
+        borderRadius: const BorderRadius.only(
           bottomLeft: Radius.circular(20),
           bottomRight: Radius.circular(20),
         ),
@@ -200,29 +231,30 @@ class _MeetingScreenState extends State<MeetingScreen> {
     required Color color,
   }) {
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         CircleAvatar(
-          radius: 30,
+          radius: 22,
           backgroundColor: color.withOpacity(0.2),
           child: Icon(
             icon,
             color: color,
-            size: 30,
+            size: 22,
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         Text(
           value.toString(),
           style: TextStyle(
             color: color,
-            fontSize: 24,
+            fontSize: 18,
             fontWeight: FontWeight.bold,
           ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 2),
         Text(
           label,
-          style: const TextStyle(color: Colors.white70, fontSize: 14),
+          style: const TextStyle(color: Colors.white70, fontSize: 12),
         ),
       ],
     );
@@ -235,7 +267,7 @@ class _MeetingScreenState extends State<MeetingScreen> {
     ];
     
     return Container(
-      height: 40,
+      height: 36,
       margin: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
         children: filterOptions.map((filter) {
@@ -260,6 +292,7 @@ class _MeetingScreenState extends State<MeetingScreen> {
                   style: TextStyle(
                     color: isSelected ? color : Colors.white70,
                     fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                    fontSize: 13,
                   ),
                 ),
               ),
@@ -278,14 +311,14 @@ class _MeetingScreenState extends State<MeetingScreen> {
           children: [
             Icon(
               _selectedFilter == 'upcoming' ? Icons.calendar_today : Icons.history,
-              size: 80,
+              size: 70,
               color: Colors.grey.shade600,
             ),
             const SizedBox(height: 16),
             Text(
               'No ${_selectedFilter == 'upcoming' ? 'upcoming' : 'past'} meetings',
               style: TextStyle(
-                fontSize: 18,
+                fontSize: 16,
                 fontWeight: FontWeight.bold,
                 color: Colors.grey.shade400,
               ),
@@ -296,7 +329,7 @@ class _MeetingScreenState extends State<MeetingScreen> {
                 ? 'Create new meetings to get started' 
                 : 'Past meetings will appear here',
               style: TextStyle(
-                fontSize: 14,
+                fontSize: 13,
                 color: Colors.grey.shade600,
               ),
               textAlign: TextAlign.center,
@@ -311,10 +344,15 @@ class _MeetingScreenState extends State<MeetingScreen> {
       itemCount: filteredMeetings.length,
       itemBuilder: (context, index) {
         final meeting = filteredMeetings[index];
+        final meetingDate = DateTime.parse(meeting['meeting_date']);
+        final isUpcoming = meetingDate.isAfter(DateTime.now());
+        
         return _MeetingCard(
           meeting: meeting,
           isAdmin: _isAdmin,
+          isUpcoming: isUpcoming,
           onDelete: _deleteMeeting,
+          onJoin: _launchMeetingUrl,
           onTap: () async {
             final result = await Navigator.push(
               context,
@@ -337,22 +375,40 @@ class _MeetingScreenState extends State<MeetingScreen> {
 class _MeetingCard extends StatelessWidget {
   final Map<String, dynamic> meeting;
   final bool isAdmin;
+  final bool isUpcoming;
   final Function(String) onDelete;
+  final Function(String?) onJoin;
   final VoidCallback onTap;
 
   const _MeetingCard({
     required this.meeting,
     required this.isAdmin,
+    required this.isUpcoming,
     required this.onDelete,
+    required this.onJoin,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final meetingDate = DateTime.parse(meeting['meeting_date']);
-    final isUpcoming = meetingDate.isAfter(DateTime.now());
     final dateFormat = DateFormat('E, MMM d, yyyy');
     final timeFormat = DateFormat('h:mm a');
+    final hasUrl = meeting['meeting_url'] != null && meeting['meeting_url'].toString().isNotEmpty;
+    final isCreator = meeting['creator'] != null && 
+        meeting['creator']['id'] == SupabaseService().client.auth.currentUser?.id;
+    final canCancel = isUpcoming && (isAdmin || isCreator);
+    
+    // Limit title to 25 characters
+    final title = (meeting['title'] ?? 'Untitled Meeting').length > 25 
+        ? '${(meeting['title'] ?? 'Untitled Meeting').substring(0, 25)}...' 
+        : (meeting['title'] ?? 'Untitled Meeting');
+    
+    // Get creator name
+    String creatorName = 'Unknown';
+    if (meeting['creator'] != null && meeting['creator']['full_name'] != null) {
+      creatorName = meeting['creator']['full_name'];
+    }
     
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
@@ -363,188 +419,209 @@ class _MeetingCard extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header with title and status
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.green.shade400.withOpacity(0.2),
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(16),
+                  topRight: Radius.circular(16),
+                ),
+              ),
+              child: Row(
                 children: [
-                  Text(
-                    meeting['meeting_number'] ?? 'MTG-???',
-                    style: TextStyle(
-                      color: Colors.grey.shade400,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
+                  Icon(
+                    isUpcoming ? Icons.calendar_today : Icons.event_available,
+                    color: isUpcoming ? Colors.green.shade400 : Colors.grey.shade400,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  const Spacer(),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: isUpcoming 
-                        ? Colors.green.shade400.withOpacity(0.2)
-                        : Colors.grey.shade600.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(12),
+                  if (canCancel)
+                    IconButton(
+                      onPressed: () => onDelete(meeting['id']),
+                      icon: const Icon(Icons.delete, color: Colors.red, size: 18),
+                      tooltip: 'Cancel Meeting',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          isUpcoming ? Icons.event_available : Icons.event_busy,
-                          color: isUpcoming ? Colors.green.shade400 : Colors.grey.shade600,
-                          size: 14,
+                ],
+              ),
+            ),
+            
+            // Meeting details
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Date and time
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.access_time,
+                        color: Colors.grey.shade400,
+                        size: 14,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        isUpcoming 
+                            ? '${dateFormat.format(meetingDate)}, ${timeFormat.format(meetingDate)}'
+                            : 'Yesterday, ${timeFormat.format(meetingDate)}',
+                        style: TextStyle(
+                          color: Colors.grey.shade300,
+                          fontSize: 13,
                         ),
-                        const SizedBox(width: 4),
-                        Text(
-                          isUpcoming ? 'UPCOMING' : 'PAST',
-                          style: TextStyle(
-                            color: isUpcoming ? Colors.green.shade400 : Colors.grey.shade600,
+                      ),
+                      if (!isUpcoming && meeting['duration'] != null)
+                        Row(
+                          children: [
+                            const SizedBox(width: 8),
+                            Icon(
+                              Icons.timer,
+                              color: Colors.orange.shade400,
+                              size: 14,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${meeting['duration']} min',
+                              style: TextStyle(
+                                color: Colors.orange.shade400,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                    ],
+                  ),
+                  
+                  const SizedBox(height: 8),
+                  
+                  // Creator info
+                  Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 10,
+                        backgroundColor: Colors.green.shade700,
+                        child: Text(
+                          creatorName.isNotEmpty ? creatorName[0].toUpperCase() : '?',
+                          style: const TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.bold,
+                            color: Colors.white,
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text(
-                meeting['title'] ?? 'Untitled Meeting',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 8),
-              if (meeting['description'] != null)
-                Text(
-                  meeting['description'],
-                  style: TextStyle(
-                    color: Colors.grey.shade400,
-                    fontSize: 14,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Icon(
-                    Icons.calendar_month,
-                    color: Colors.blue.shade400,
-                    size: 16,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    dateFormat.format(meetingDate),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Icon(
-                    Icons.access_time,
-                    color: Colors.orange.shade400,
-                    size: 16,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    timeFormat.format(meetingDate),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  if (meeting['meeting_url'] != null)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.videocam,
-                            color: Colors.blue,
-                            size: 14,
+                      const SizedBox(width: 6),
+                      Text(
+                        'Created by $creatorName',
+                        style: TextStyle(
+                          color: Colors.grey.shade400,
+                          fontSize: 12,
+                        ),
+                      ),
+                      const Spacer(),
+                      if (isUpcoming && hasUrl)
+                        ElevatedButton(
+                          onPressed: () => onJoin(meeting['meeting_url']),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                            foregroundColor: Colors.white,
+                            minimumSize: const Size(70, 32),
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
                           ),
-                          const SizedBox(width: 4),
-                          const Text(
-                            'Meeting Link',
-                            style: TextStyle(
-                              color: Colors.blue,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
+                          child: const Text(
+                            'Join',
+                            style: TextStyle(fontSize: 13),
+                          ),
+                        ),
+                    ],
+                  ),
+                  
+                  // Transcription and AI Summary buttons for past meetings with URL
+                  if (!isUpcoming && hasUrl)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () {
+                                // Would navigate to transcription in a real app
+                              },
+                              icon: Icon(
+                                Icons.description,
+                                color: Colors.green.shade400,
+                                size: 14,
+                              ),
+                              label: Text(
+                                'Transcription',
+                                style: TextStyle(
+                                  color: Colors.green.shade400,
+                                  fontSize: 12,
+                                ),
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                side: BorderSide(color: Colors.green.shade400),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                padding: const EdgeInsets.symmetric(vertical: 6),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () {
+                                // Would navigate to AI summary in a real app
+                              },
+                              icon: Icon(
+                                Icons.auto_awesome,
+                                color: Colors.blue.shade400,
+                                size: 14,
+                              ),
+                              label: Text(
+                                'AI Summary',
+                                style: TextStyle(
+                                  color: Colors.blue.shade400,
+                                  fontSize: 12,
+                                ),
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                side: BorderSide(color: Colors.blue.shade400),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                padding: const EdgeInsets.symmetric(vertical: 6),
+                              ),
                             ),
                           ),
                         ],
                       ),
                     ),
-                  const Spacer(),
-                  if (meeting['creator'] != null)
-                    Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 12,
-                          backgroundColor: Colors.green.shade700,
-                          child: Text(
-                            meeting['creator']['full_name'] != null && meeting['creator']['full_name'].isNotEmpty
-                                ? meeting['creator']['full_name'][0].toUpperCase()
-                                : '?',
-                            style: const TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Created by ${meeting['creator']['full_name'] ?? 'Unknown'}',
-                          style: TextStyle(
-                            color: Colors.grey.shade400,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
                 ],
               ),
-              if ((isAdmin || (meeting['creator'] != null && 
-                  meeting['creator']['id'] == SupabaseService().client.auth.currentUser?.id)) && 
-                  isUpcoming)
-                Padding(
-                  padding: const EdgeInsets.only(top: 16),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      TextButton.icon(
-                        onPressed: () => onDelete(meeting['id']),
-                        icon: const Icon(Icons.delete, color: Colors.red),
-                        label: const Text(
-                          'Cancel Meeting',
-                          style: TextStyle(color: Colors.red),
-                        ),
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

@@ -204,7 +204,7 @@ class _CreateMeetingScreenState extends State<CreateMeetingScreen> {
               decoration: InputDecoration(
                 labelText: 'Title',
                 labelStyle: TextStyle(color: Colors.grey.shade400),
-                hintText: 'Enter meeting title',
+                hintText: 'Enter meeting title (max 25 chars)',
                 hintStyle: TextStyle(color: Colors.grey.shade600),
                 filled: true,
                 fillColor: const Color(0xFF2D2D2D),
@@ -213,8 +213,16 @@ class _CreateMeetingScreenState extends State<CreateMeetingScreen> {
                   borderSide: BorderSide.none,
                 ),
                 prefixIcon: const Icon(Icons.title, color: Colors.grey),
+                counterText: '${_titleController.text.length}/25',
+                counterStyle: TextStyle(color: Colors.grey.shade400),
               ),
               style: const TextStyle(color: Colors.white),
+              maxLength: 25,
+              onChanged: (value) {
+                setState(() {
+                  // Trigger rebuild to update counter
+                });
+              },
               validator: (value) {
                 if (value == null || value.trim().isEmpty) {
                   return 'Please enter a title';
