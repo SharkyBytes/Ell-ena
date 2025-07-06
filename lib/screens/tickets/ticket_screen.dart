@@ -283,9 +283,10 @@ class _TicketScreenState extends State<TicketScreen> {
   }
 
   Widget _buildProgressBar({required double width, required Color color}) {
+    final screenWidth = MediaQuery.of(context).size.width - 32; // Total available width
     return Container(
       height: 8,
-      width: MediaQuery.of(context).size.width * width - 32 * width,
+      width: screenWidth * width,
       color: color,
     );
   }
