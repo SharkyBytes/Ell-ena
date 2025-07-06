@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:async';
 
 class SupabaseService {
   static final SupabaseService _instance = SupabaseService._internal();
@@ -11,6 +12,14 @@ class SupabaseService {
   // Cache for team members to avoid repeated network calls
   List<Map<String, dynamic>> _teamMembersCache = [];
   String? _currentTeamId;
+  
+  // Stream controllers for real-time updates
+  final _tasksStreamController = StreamController<List<Map<String, dynamic>>>.broadcast();
+  final _ticketsStreamController = StreamController<List<Map<String, dynamic>>>.broadcast();
+  
+  // Getters for streams
+  Stream<List<Map<String, dynamic>>> get tasksStream => _tasksStreamController.stream;
+  Stream<List<Map<String, dynamic>>> get ticketsStream => _ticketsStreamController.stream;
   
   factory SupabaseService() {
     return _instance;
@@ -624,7 +633,7 @@ class SupabaseService {
           .select('*')
           .eq('team_id', teamId)
           .order('created_at', ascending: false);
-      
+          
       // Process the response to make it compatible with existing code
       final List<Map<String, dynamic>> processedTasks = [];
       for (var task in response) {
@@ -978,5 +987,482 @@ class SupabaseService {
         'error': e.toString(),
       };
     }
+  }
+  
+  // Ticket-related methods
+  
+  // Get predefined ticket categories
+  List<String> getTicketCategories() {
+    return ['Bug', 'Feature Request', 'UI/UX', 'Performance', 'Documentation', 'Security', 'Other'];
+  }
+  
+  // Get tickets for the current user's team
+  Future<List<Map<String, dynamic>>> getTickets() async {
+    try {
+      if (!_isInitialized) return [];
+      
+      final user = _client.auth.currentUser;
+      if (user == null) return [];
+      
+      // Get the user's team ID
+      final userProfile = await getCurrentUserProfile();
+      if (userProfile == null || userProfile['team_id'] == null) return [];
+      
+      final teamId = userProfile['team_id'];
+      
+      // Get all tickets for this team
+      final response = await _client
+          .from('tickets')
+          .select('*')
+          .eq('team_id', teamId)
+          .order('created_at', ascending: false);
+          
+      // Process the response to add creator and assignee info
+      final List<Map<String, dynamic>> processedTickets = [];
+      for (var ticket in response) {
+        final Map<String, dynamic> processedTicket = {...ticket};
+        
+        // Add creator info if available
+        if (ticket['created_by'] != null) {
+          final creatorInfo = await _getUserInfo(ticket['created_by']);
+          if (creatorInfo != null) {
+            processedTicket['creator'] = creatorInfo;
+          }
+        }
+        
+        // Add assignee info if available
+        if (ticket['assigned_to'] != null) {
+          final assigneeInfo = await _getUserInfo(ticket['assigned_to']);
+          if (assigneeInfo != null) {
+            processedTicket['assignee'] = assigneeInfo;
+          }
+        }
+        
+        processedTickets.add(processedTicket);
+      }
+      
+      // Update the stream
+      _ticketsStreamController.add(processedTickets);
+          
+      return processedTickets;
+    } catch (e) {
+      debugPrint('Error getting tickets: $e');
+      return [];
+    }
+  }
+  
+  // Helper method to get user info
+  Future<Map<String, dynamic>?> _getUserInfo(String userId) async {
+    try {
+      // First check the cache
+      try {
+        final cachedUser = _teamMembersCache.firstWhere(
+          (member) => member['id'] == userId,
+        );
+        return cachedUser;
+      } catch (e) {
+        // Not found in cache, fetch from database
+        final response = await _client
+            .from('users')
+            .select('id, full_name, email, role')
+            .eq('id', userId)
+            .maybeSingle();
+            
+        return response;
+      }
+    } catch (e) {
+      debugPrint('Error getting user info: $e');
+      return null;
+    }
+  }
+  
+  // Create a new ticket
+  Future<Map<String, dynamic>> createTicket({
+    required String title,
+    String? description,
+    required String priority,
+    required String category,
+    String? assignedToUserId,
+  }) async {
+    try {
+      if (!_isInitialized) {
+        return {
+          'success': false,
+          'error': 'Supabase is not initialized',
+        };
+      }
+      
+      final user = _client.auth.currentUser;
+      if (user == null) {
+        return {
+          'success': false,
+          'error': 'User not authenticated',
+        };
+      }
+      
+      // Get the user's team ID
+      final userProfile = await getCurrentUserProfile();
+      if (userProfile == null || userProfile['team_id'] == null) {
+        return {
+          'success': false,
+          'error': 'User not associated with a team',
+        };
+      }
+      
+      final teamId = userProfile['team_id'];
+      
+      // Create the ticket
+      final Map<String, dynamic> ticketData = {
+        'title': title,
+        'description': description,
+        'priority': priority,
+        'category': category,
+        'status': 'open',
+        'approval_status': 'pending',
+        'team_id': teamId,
+        'created_by': user.id,
+      };
+      
+      if (assignedToUserId != null && assignedToUserId.isNotEmpty) {
+        ticketData['assigned_to'] = assignedToUserId;
+      }
+      
+      final response = await _client
+          .from('tickets')
+          .insert(ticketData)
+          .select();
+          
+      if (response.isEmpty) {
+        return {
+          'success': false,
+          'error': 'Failed to create ticket',
+        };
+      }
+      
+      // Refresh tickets
+      await getTickets();
+      
+      return {
+        'success': true,
+        'ticket': response[0],
+      };
+    } catch (e) {
+      debugPrint('Error creating ticket: $e');
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
+    }
+  }
+  
+  // Update a ticket's status
+  Future<Map<String, dynamic>> updateTicketStatus({
+    required String ticketId,
+    required String status,
+  }) async {
+    try {
+      if (!_isInitialized) {
+        return {
+          'success': false,
+          'error': 'Supabase is not initialized',
+        };
+      }
+      
+      final user = _client.auth.currentUser;
+      if (user == null) {
+        return {
+          'success': false,
+          'error': 'User not authenticated',
+        };
+      }
+      
+      // Update the ticket status
+      await _client
+          .from('tickets')
+          .update({'status': status})
+          .eq('id', ticketId);
+          
+      // Refresh tickets
+      await getTickets();
+      
+      return {
+        'success': true,
+      };
+    } catch (e) {
+      debugPrint('Error updating ticket status: $e');
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
+    }
+  }
+  
+  // Update a ticket's priority
+  Future<Map<String, dynamic>> updateTicketPriority({
+    required String ticketId,
+    required String priority,
+  }) async {
+    try {
+      if (!_isInitialized) {
+        return {
+          'success': false,
+          'error': 'Supabase is not initialized',
+        };
+      }
+      
+      final user = _client.auth.currentUser;
+      if (user == null) {
+        return {
+          'success': false,
+          'error': 'User not authenticated',
+        };
+      }
+      
+      // Update the ticket priority
+      await _client
+          .from('tickets')
+          .update({'priority': priority})
+          .eq('id', ticketId);
+          
+      // Refresh tickets
+      await getTickets();
+      
+      return {
+        'success': true,
+      };
+    } catch (e) {
+      debugPrint('Error updating ticket priority: $e');
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
+    }
+  }
+  
+  // Update a ticket's approval status (admin only)
+  Future<Map<String, dynamic>> updateTicketApproval({
+    required String ticketId,
+    required String approvalStatus,
+  }) async {
+    try {
+      if (!_isInitialized) {
+        return {
+          'success': false,
+          'error': 'Supabase is not initialized',
+        };
+      }
+      
+      final user = _client.auth.currentUser;
+      if (user == null) {
+        return {
+          'success': false,
+          'error': 'User not authenticated',
+        };
+      }
+      
+      // Check if user is admin
+      final userProfile = await getCurrentUserProfile();
+      if (userProfile == null || userProfile['role'] != 'admin') {
+        return {
+          'success': false,
+          'error': 'Only admins can approve tickets',
+        };
+      }
+      
+      // Update the ticket approval status
+      await _client
+          .from('tickets')
+          .update({'approval_status': approvalStatus})
+          .eq('id', ticketId);
+          
+      // Refresh tickets
+      await getTickets();
+      
+      return {
+        'success': true,
+      };
+    } catch (e) {
+      debugPrint('Error updating ticket approval: $e');
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
+    }
+  }
+  
+  // Get ticket details with comments
+  Future<Map<String, dynamic>?> getTicketDetails(String ticketId) async {
+    try {
+      if (!_isInitialized) return null;
+      
+      final user = _client.auth.currentUser;
+      if (user == null) return null;
+      
+      // Get ticket details
+      final ticketResponse = await _client
+          .from('tickets')
+          .select('*')
+          .eq('id', ticketId)
+          .single();
+      
+      // Get ticket comments
+      final commentsResponse = await _client
+          .from('ticket_comments')
+          .select('*')
+          .eq('ticket_id', ticketId)
+          .order('created_at', ascending: true);
+          
+      // Get creator and assignee info
+      String? createdById = ticketResponse['created_by'];
+      String? assignedToId = ticketResponse['assigned_to'];
+      
+      Map<String, dynamic>? creator;
+      Map<String, dynamic>? assignee;
+      
+      if (createdById != null) {
+        creator = await _getUserInfo(createdById);
+      }
+      
+      if (assignedToId != null) {
+        assignee = await _getUserInfo(assignedToId);
+      }
+      
+      // Get comment user info
+      List<Map<String, dynamic>> commentsWithUsers = [];
+      for (var comment in commentsResponse) {
+        String? userId = comment['user_id'];
+        Map<String, dynamic>? user;
+        
+        if (userId != null) {
+          user = await _getUserInfo(userId);
+        }
+        
+        commentsWithUsers.add({
+          ...comment,
+          'user': user,
+        });
+      }
+      
+      Map<String, dynamic> ticketWithDetails = {
+        ...ticketResponse,
+        'creator': creator,
+        'assignee': assignee,
+      };
+          
+      return {
+        'ticket': ticketWithDetails,
+        'comments': commentsWithUsers,
+      };
+    } catch (e) {
+      debugPrint('Error getting ticket details: $e');
+      return null;
+    }
+  }
+  
+  // Add a comment to a ticket
+  Future<Map<String, dynamic>> addTicketComment({
+    required String ticketId,
+    required String content,
+  }) async {
+    try {
+      if (!_isInitialized) {
+        return {
+          'success': false,
+          'error': 'Supabase is not initialized',
+        };
+      }
+      
+      final user = _client.auth.currentUser;
+      if (user == null) {
+        return {
+          'success': false,
+          'error': 'User not authenticated',
+        };
+      }
+      
+      // Add the comment
+      final response = await _client
+          .from('ticket_comments')
+          .insert({
+            'ticket_id': ticketId,
+            'user_id': user.id,
+            'content': content,
+          })
+          .select();
+          
+      if (response.isEmpty) {
+        return {
+          'success': false,
+          'error': 'Failed to add comment',
+        };
+      }
+      
+      // Get user info
+      final userInfo = await _getUserInfo(user.id);
+      
+      final commentWithUser = {
+        ...response[0],
+        'user': userInfo,
+      };
+          
+      return {
+        'success': true,
+        'comment': commentWithUser,
+      };
+    } catch (e) {
+      debugPrint('Error adding ticket comment: $e');
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
+    }
+  }
+  
+  // Assign a ticket to a user
+  Future<Map<String, dynamic>> assignTicket({
+    required String ticketId,
+    required String userId,
+  }) async {
+    try {
+      if (!_isInitialized) {
+        return {
+          'success': false,
+          'error': 'Supabase is not initialized',
+        };
+      }
+      
+      final user = _client.auth.currentUser;
+      if (user == null) {
+        return {
+          'success': false,
+          'error': 'User not authenticated',
+        };
+      }
+      
+      // Update the ticket
+      await _client
+          .from('tickets')
+          .update({'assigned_to': userId})
+          .eq('id', ticketId);
+          
+      // Refresh tickets
+      await getTickets();
+      
+      return {
+        'success': true,
+      };
+    } catch (e) {
+      debugPrint('Error assigning ticket: $e');
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
+    }
+  }
+  
+  // Clean up resources
+  void dispose() {
+    _tasksStreamController.close();
+    _ticketsStreamController.close();
   }
 } 
