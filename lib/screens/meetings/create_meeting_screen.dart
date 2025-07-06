@@ -15,11 +15,11 @@ class _CreateMeetingScreenState extends State<CreateMeetingScreen> {
   final _descriptionController = TextEditingController();
   final _urlController = TextEditingController();
   final _supabaseService = SupabaseService();
-  
+
   DateTime? _selectedDate;
   TimeOfDay? _selectedTime;
   bool _isLoading = false;
-  
+
   @override
   void dispose() {
     _titleController.dispose();
@@ -27,10 +27,10 @@ class _CreateMeetingScreenState extends State<CreateMeetingScreen> {
     _urlController.dispose();
     super.dispose();
   }
-  
+
   Future<void> _createMeeting() async {
     if (!_formKey.currentState!.validate()) return;
-    
+
     if (_selectedDate == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -40,7 +40,7 @@ class _CreateMeetingScreenState extends State<CreateMeetingScreen> {
       );
       return;
     }
-    
+
     if (_selectedTime == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -50,11 +50,11 @@ class _CreateMeetingScreenState extends State<CreateMeetingScreen> {
       );
       return;
     }
-    
+
     setState(() {
       _isLoading = true;
     });
-    
+
     try {
       // Combine date and time
       final meetingDateTime = DateTime(
@@ -64,18 +64,20 @@ class _CreateMeetingScreenState extends State<CreateMeetingScreen> {
         _selectedTime!.hour,
         _selectedTime!.minute,
       );
-      
+
       final result = await _supabaseService.createMeeting(
         title: _titleController.text.trim(),
-        description: _descriptionController.text.trim().isNotEmpty 
-            ? _descriptionController.text.trim() 
-            : null,
+        description:
+            _descriptionController.text.trim().isNotEmpty
+                ? _descriptionController.text.trim()
+                : null,
         meetingDate: meetingDateTime,
-        meetingUrl: _urlController.text.trim().isNotEmpty 
-            ? _urlController.text.trim() 
-            : null,
+        meetingUrl:
+            _urlController.text.trim().isNotEmpty
+                ? _urlController.text.trim()
+                : null,
       );
-      
+
       if (mounted) {
         if (result['success']) {
           Navigator.pop(context, true);
@@ -83,7 +85,7 @@ class _CreateMeetingScreenState extends State<CreateMeetingScreen> {
           setState(() {
             _isLoading = false;
           });
-          
+
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Failed to create meeting: ${result['error']}'),
@@ -98,7 +100,7 @@ class _CreateMeetingScreenState extends State<CreateMeetingScreen> {
         setState(() {
           _isLoading = false;
         });
-        
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error creating meeting: $e'),
@@ -108,7 +110,7 @@ class _CreateMeetingScreenState extends State<CreateMeetingScreen> {
       }
     }
   }
-  
+
   Future<void> _selectDate() async {
     final picked = await showDatePicker(
       context: context,
@@ -130,18 +132,31 @@ class _CreateMeetingScreenState extends State<CreateMeetingScreen> {
         );
       },
     );
-    
+
     if (picked != null) {
       setState(() {
         _selectedDate = picked;
       });
     }
   }
-  
+
   Future<void> _selectTime() async {
+    TimeOfDay initialTime = _selectedTime ?? TimeOfDay.now();
+
+    // If selected date is today, ensure time is not in the past
+    if (_selectedDate != null &&
+        _selectedDate!.year == DateTime.now().year &&
+        _selectedDate!.month == DateTime.now().month &&
+        _selectedDate!.day == DateTime.now().day) {
+      final now = TimeOfDay.now();
+      if (initialTime.hour < now.hour ||
+          (initialTime.hour == now.hour && initialTime.minute <= now.minute)) {
+        initialTime = TimeOfDay(hour: now.hour, minute: now.minute + 1);
+      }
+    }
     final picked = await showTimePicker(
       context: context,
-      initialTime: _selectedTime ?? TimeOfDay.now(),
+      initialTime: initialTime,
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
@@ -157,7 +172,7 @@ class _CreateMeetingScreenState extends State<CreateMeetingScreen> {
         );
       },
     );
-    
+
     if (picked != null) {
       setState(() {
         _selectedTime = picked;
@@ -231,7 +246,7 @@ class _CreateMeetingScreenState extends State<CreateMeetingScreen> {
               },
             ),
             const SizedBox(height: 16),
-            
+
             // Description
             TextFormField(
               controller: _descriptionController,
@@ -253,17 +268,14 @@ class _CreateMeetingScreenState extends State<CreateMeetingScreen> {
               maxLines: 3,
             ),
             const SizedBox(height: 24),
-            
+
             // Date
             Text(
               'Date & Time',
-              style: TextStyle(
-                color: Colors.grey.shade400,
-                fontSize: 16,
-              ),
+              style: TextStyle(color: Colors.grey.shade400, fontSize: 16),
             ),
             const SizedBox(height: 8),
-            
+
             // Date selector
             InkWell(
               onTap: _selectDate,
@@ -296,12 +308,20 @@ class _CreateMeetingScreenState extends State<CreateMeetingScreen> {
                           const SizedBox(height: 4),
                           Text(
                             _selectedDate != null
-                                ? DateFormat('EEEE, MMMM d, yyyy').format(_selectedDate!)
+                                ? DateFormat(
+                                  'EEEE, MMMM d, yyyy',
+                                ).format(_selectedDate!)
                                 : 'Select date',
                             style: TextStyle(
-                              color: _selectedDate != null ? Colors.white : Colors.grey.shade600,
+                              color:
+                                  _selectedDate != null
+                                      ? Colors.white
+                                      : Colors.grey.shade600,
                               fontSize: 16,
-                              fontWeight: _selectedDate != null ? FontWeight.bold : FontWeight.normal,
+                              fontWeight:
+                                  _selectedDate != null
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
                             ),
                           ),
                         ],
@@ -317,7 +337,7 @@ class _CreateMeetingScreenState extends State<CreateMeetingScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            
+
             // Time selector
             InkWell(
               onTap: _selectTime,
@@ -353,9 +373,15 @@ class _CreateMeetingScreenState extends State<CreateMeetingScreen> {
                                 ? _selectedTime!.format(context)
                                 : 'Select time',
                             style: TextStyle(
-                              color: _selectedTime != null ? Colors.white : Colors.grey.shade600,
+                              color:
+                                  _selectedTime != null
+                                      ? Colors.white
+                                      : Colors.grey.shade600,
                               fontSize: 16,
-                              fontWeight: _selectedTime != null ? FontWeight.bold : FontWeight.normal,
+                              fontWeight:
+                                  _selectedTime != null
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
                             ),
                           ),
                         ],
@@ -371,7 +397,7 @@ class _CreateMeetingScreenState extends State<CreateMeetingScreen> {
               ),
             ),
             const SizedBox(height: 24),
-            
+
             // Meeting URL
             TextFormField(
               controller: _urlController,
@@ -391,7 +417,7 @@ class _CreateMeetingScreenState extends State<CreateMeetingScreen> {
               style: const TextStyle(color: Colors.white),
             ),
             const SizedBox(height: 32),
-            
+
             // Submit button
             ElevatedButton(
               onPressed: _isLoading ? null : _createMeeting,
@@ -403,27 +429,28 @@ class _CreateMeetingScreenState extends State<CreateMeetingScreen> {
                 ),
                 disabledBackgroundColor: Colors.grey.shade800,
               ),
-              child: _isLoading
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
+              child:
+                  _isLoading
+                      ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                      : const Text(
+                        'Create Meeting',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    )
-                  : const Text(
-                      'Create Meeting',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
             ),
           ],
         ),
       ),
     );
   }
-} 
+}
