@@ -257,14 +257,17 @@ class _TaskScreenState extends State<TaskScreen> {
           return Draggable<Map<String, dynamic>>(
             key: ValueKey(task['id']),
             data: task,
-            feedback: SizedBox(
-              width: MediaQuery.of(context).size.width - 32,
-              child: _TaskCard(
-                task: task,
-                isAdmin: _isAdmin,
-                onStatusChange: _updateTaskStatus,
-                onApprovalChange: _updateTaskApproval,
-                onTap: () {},
+            feedback: Material(
+              color: Colors.transparent,
+              child: SizedBox(
+                width: MediaQuery.of(context).size.width - 32,
+                child: _TaskCard(
+                  task: task,
+                  isAdmin: _isAdmin,
+                  onStatusChange: _updateTaskStatus,
+                  onApprovalChange: _updateTaskApproval,
+                  onTap: () {},
+                ),
               ),
             ),
             childWhenDragging: Opacity(

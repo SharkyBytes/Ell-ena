@@ -1,8 +1,10 @@
+import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:async';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class SupabaseService {
   static final SupabaseService _instance = SupabaseService._internal();
@@ -12,6 +14,9 @@ class SupabaseService {
   // Cache for team members to avoid repeated network calls
   List<Map<String, dynamic>> _teamMembersCache = [];
   String? _currentTeamId;
+  
+  // Cache for current user profile
+  Map<String, dynamic>? _userProfileCache;
   
   // Stream controllers for real-time updates
   final _tasksStreamController = StreamController<List<Map<String, dynamic>>>.broadcast();
@@ -59,12 +64,54 @@ class SupabaseService {
       _client = Supabase.instance.client;
       _isInitialized = true;
       
+      // Load cached user profile
+      await _loadCachedUserProfile();
+      
       // Load team members after initialization if user is logged in
       await _loadTeamMembersIfLoggedIn();
     } catch (e) {
       debugPrint('Error initializing Supabase: $e');
       rethrow;
     } 
+  }
+  
+  // Load cached user profile from local storage
+  Future<void> _loadCachedUserProfile() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cachedProfile = prefs.getString('user_profile');
+      
+      if (cachedProfile != null) {
+        _userProfileCache = json.decode(cachedProfile) as Map<String, dynamic>;
+        debugPrint('Loaded user profile from cache');
+      }
+    } catch (e) {
+      debugPrint('Error loading cached user profile: $e');
+    }
+  }
+  
+  // Save user profile to local storage
+  Future<void> _saveUserProfileToCache(Map<String, dynamic> profile) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('user_profile', json.encode(profile));
+      _userProfileCache = profile;
+      debugPrint('Saved user profile to cache');
+    } catch (e) {
+      debugPrint('Error saving user profile to cache: $e');
+    }
+  }
+  
+  // Clear cached user profile
+  Future<void> _clearCachedUserProfile() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('user_profile');
+      _userProfileCache = null;
+      debugPrint('Cleared user profile cache');
+    } catch (e) {
+      debugPrint('Error clearing cached user profile: $e');
+    }
   }
   
   // Load team members if user is logged in
@@ -324,12 +371,17 @@ class SupabaseService {
   }
   
   // Get current user profile
-  Future<Map<String, dynamic>?> getCurrentUserProfile() async {
+  Future<Map<String, dynamic>?> getCurrentUserProfile({bool forceRefresh = false}) async {
     try {
       if (!_isInitialized) return null;
       
       final user = _client.auth.currentUser;
       if (user == null) return null;
+      
+      // Return cached profile if available and not forcing refresh
+      if (!forceRefresh && _userProfileCache != null) {
+        return _userProfileCache;
+      }
       
       final response = await _client
           .from('users')
@@ -337,10 +389,15 @@ class SupabaseService {
           .eq('id', user.id)
           .maybeSingle();
           
+      if (response != null) {
+        // Save to cache
+        await _saveUserProfileToCache(response);
+      }
+          
       return response;
     } catch (e) {
       debugPrint('Error getting user profile: $e');
-      return null;
+      return _userProfileCache; // Fallback to cache on error
     }
   }
   
@@ -368,6 +425,9 @@ class SupabaseService {
   Future<void> signOut() async {
     if (!_isInitialized) return;
     await _client.auth.signOut();
+    await _clearCachedUserProfile();
+    _teamMembersCache = [];
+    _currentTeamId = null;
   }
   
   // Verify OTP for email verification

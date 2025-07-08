@@ -1,5 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
+import 'package:intl/intl.dart';
+import '../tasks/create_task_screen.dart';
+import '../tickets/create_ticket_screen.dart';
+import '../meetings/create_meeting_screen.dart';
+import '../../services/supabase_service.dart';
+import '../meetings/meeting_detail_screen.dart';
+import '../tasks/task_detail_screen.dart';
+import '../tickets/ticket_detail_screen.dart';
 
 class CalendarScreen extends StatefulWidget {
   const CalendarScreen({super.key});
@@ -14,40 +22,113 @@ class _CalendarScreenState extends State<CalendarScreen> {
   DateTime? _selectedDay;
   TimeOfDay? _selectedTime;
   final Map<DateTime, List<CalendarEvent>> _events = {};
+  final _supabaseService = SupabaseService();
+  bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
     _selectedDay = _focusedDay;
-    // Add sample events
-    final today = DateTime.now();
-    _events[today] = [
-      CalendarEvent(
-        title: 'Team Meeting',
-        startTime: TimeOfDay(hour: 10, minute: 0),
-        endTime: TimeOfDay(hour: 11, minute: 0),
-        type: EventType.meeting,
-      ),
-      CalendarEvent(
-        title: 'Design Review',
-        startTime: TimeOfDay(hour: 14, minute: 0),
-        endTime: TimeOfDay(hour: 15, minute: 30),
-        type: EventType.task,
-      ),
-    ];
+    _loadEvents();
+  }
+
+  Future<void> _loadEvents() async {
+    setState(() {
+      _isLoading = true;
+    });
+    
+    try {
+      // Clear existing events
+      _events.clear();
+      
+      // Load tasks
+      final tasks = await _supabaseService.getTasks();
+      for (var task in tasks) {
+        if (task['due_date'] != null) {
+          final dueDate = DateTime.parse(task['due_date']);
+          final dateOnly = DateTime(dueDate.year, dueDate.month, dueDate.day);
+          
+          if (!_events.containsKey(dateOnly)) {
+            _events[dateOnly] = [];
+          }
+          
+          _events[dateOnly]!.add(CalendarEvent(
+            title: task['title'] ?? 'Untitled Task',
+            startTime: const TimeOfDay(hour: 23, minute: 0),
+            endTime: const TimeOfDay(hour: 23, minute: 59),
+            type: EventType.task,
+            id: task['id'],
+          ));
+        }
+      }
+      
+      // Load tickets
+      final tickets = await _supabaseService.getTickets();
+      for (var ticket in tickets) {
+        if (ticket['created_at'] != null) {
+          final createdAt = DateTime.parse(ticket['created_at']);
+          final dateOnly = DateTime(createdAt.year, createdAt.month, createdAt.day);
+          
+          if (!_events.containsKey(dateOnly)) {
+            _events[dateOnly] = [];
+          }
+          
+          _events[dateOnly]!.add(CalendarEvent(
+            title: ticket['title'] ?? 'Untitled Ticket',
+            startTime: TimeOfDay(hour: createdAt.hour, minute: createdAt.minute),
+            endTime: TimeOfDay(hour: createdAt.hour + 1, minute: createdAt.minute),
+            type: EventType.ticket,
+            id: ticket['id'],
+          ));
+        }
+      }
+      
+      // Load meetings
+      final meetings = await _supabaseService.getMeetings();
+      for (var meeting in meetings) {
+        if (meeting['meeting_date'] != null) {
+          final meetingDate = DateTime.parse(meeting['meeting_date']);
+          final dateOnly = DateTime(meetingDate.year, meetingDate.month, meetingDate.day);
+          
+          if (!_events.containsKey(dateOnly)) {
+            _events[dateOnly] = [];
+          }
+          
+          // For meetings, assume 1 hour duration
+          _events[dateOnly]!.add(CalendarEvent(
+            title: meeting['title'] ?? 'Untitled Meeting',
+            startTime: TimeOfDay(hour: meetingDate.hour, minute: meetingDate.minute),
+            endTime: TimeOfDay(hour: meetingDate.hour + 1, minute: meetingDate.minute),
+            type: EventType.meeting,
+            id: meeting['id'],
+          ));
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading events: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   List<CalendarEvent> _getEventsForDay(DateTime day) {
-    return _events[day] ?? [];
+    final normalizedDay = DateTime(day.year, day.month, day.day);
+    return _events[normalizedDay] ?? [];
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF1A1A1A),
-      body: Column(
-        children: [_buildCalendar(), Expanded(child: _buildTimeScale())],
-      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : Column(
+              children: [_buildCalendar(), Expanded(child: _buildTimeScale())],
+            ),
     );
   }
 
@@ -175,82 +256,129 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   Widget _buildEventCard(CalendarEvent event) {
-    return Container(
-      margin: const EdgeInsets.only(top: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: event.type.color.withOpacity(0.2),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: event.type.color, width: 1),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(event.type.icon, color: event.type.color, size: 16),
-          const SizedBox(width: 4),
-          Expanded(
-            child: Text(
-              event.title,
-              style: TextStyle(
-                color: event.type.color,
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
+    return GestureDetector(
+      onTap: () => _handleEventTap(event),
+      child: Container(
+        margin: const EdgeInsets.only(top: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: event.type.color.withOpacity(0.2),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: event.type.color, width: 1),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(event.type.icon, color: event.type.color, size: 16),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Text(
+                event.title,
+                style: TextStyle(
+                  color: event.type.color,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+                overflow: TextOverflow.ellipsis,
               ),
-              overflow: TextOverflow.ellipsis,
             ),
-          ),
-          Text(
-            '${event.startTime.format(context)} - ${event.endTime.format(context)}',
-            style: TextStyle(color: event.type.color, fontSize: 10),
-          ),
-        ],
+            Text(
+              '${event.startTime.format(context)} - ${event.endTime.format(context)}',
+              style: TextStyle(color: event.type.color, fontSize: 10),
+            ),
+            const SizedBox(width: 4),
+            Icon(
+              Icons.edit,
+              color: event.type.color,
+              size: 14,
+            ),
+          ],
+        ),
       ),
     );
+  }
+
+  Future<void> _handleEventTap(CalendarEvent event) async {
+    dynamic result;
+    
+    switch (event.type) {
+      case EventType.meeting:
+        // Navigate to meeting detail screen
+        result = await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => MeetingDetailScreen(meetingId: event.id),
+          ),
+        );
+        break;
+      case EventType.task:
+        // Navigate to task detail screen
+        result = await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => TaskDetailScreen(taskId: event.id),
+          ),
+        );
+        break;
+      case EventType.ticket:
+        // Navigate to ticket detail screen
+        result = await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => TicketDetailScreen(ticketId: event.id),
+          ),
+        );
+        break;
+    }
+    
+    // Refresh events if something was updated
+    if (result == true) {
+      await _loadEvents();
+    }
   }
 
   void _showCreateDialog(TimeOfDay selectedTime) {
     showDialog(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            backgroundColor: const Color(0xFF2D2D2D),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
-            title: Text(
-              'Create at ${selectedTime.format(context)}',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _buildDialogOption(
-                  'Schedule a Meeting',
-                  Icons.people,
-                  Colors.blue,
-                  () => _handleCreate(EventType.meeting),
-                ),
-                const SizedBox(height: 8),
-                _buildDialogOption(
-                  'Create a Task',
-                  Icons.task,
-                  Colors.green,
-                  () => _handleCreate(EventType.task),
-                ),
-                const SizedBox(height: 8),
-                _buildDialogOption(
-                  'Create a Ticket',
-                  Icons.confirmation_number,
-                  Colors.orange,
-                  () => _handleCreate(EventType.ticket),
-                ),
-              ],
-            ),
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF2D2D2D),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: Text(
+          'Create at ${selectedTime.format(context)}',
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
           ),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildDialogOption(
+              'Schedule a Meeting',
+              Icons.people,
+              Colors.blue,
+              () => _handleCreate(EventType.meeting, selectedTime),
+            ),
+            const SizedBox(height: 8),
+            _buildDialogOption(
+              'Create a Task',
+              Icons.task,
+              Colors.green,
+              () => _handleCreate(EventType.task, selectedTime),
+            ),
+            const SizedBox(height: 8),
+            _buildDialogOption(
+              'Create a Ticket',
+              Icons.confirmation_number,
+              Colors.orange,
+              () => _handleCreate(EventType.ticket, selectedTime),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -286,9 +414,52 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
-  void _handleCreate(EventType type) {
-    // TODO: Implement creation logic based on type
-    Navigator.of(context).pop();
+  Future<void> _handleCreate(EventType type, TimeOfDay selectedTime) async {
+    Navigator.of(context).pop(); // Close dialog
+    
+    if (_selectedDay == null) return;
+    
+    final selectedDateTime = DateTime(
+      _selectedDay!.year,
+      _selectedDay!.month,
+      _selectedDay!.day,
+      selectedTime.hour,
+      selectedTime.minute,
+    );
+    
+    dynamic result;
+    
+    switch (type) {
+      case EventType.meeting:
+        result = await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const CreateMeetingScreen(),
+          ),
+        );
+        break;
+      case EventType.task:
+        result = await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const CreateTaskScreen(),
+          ),
+        );
+        break;
+      case EventType.ticket:
+        result = await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const CreateTicketScreen(),
+          ),
+        );
+        break;
+    }
+    
+    // Refresh events if something was created
+    if (result == true) {
+      await _loadEvents();
+    }
   }
 }
 
@@ -297,12 +468,14 @@ class CalendarEvent {
   final TimeOfDay startTime;
   final TimeOfDay endTime;
   final EventType type;
+  final String id;
 
   CalendarEvent({
     required this.title,
     required this.startTime,
     required this.endTime,
     required this.type,
+    required this.id,
   });
 }
 

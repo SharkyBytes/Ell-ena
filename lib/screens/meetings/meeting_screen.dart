@@ -7,7 +7,7 @@ import 'meeting_detail_screen.dart';
 
 class MeetingScreen extends StatefulWidget {
   static final GlobalKey<_MeetingScreenState> globalKey = GlobalKey<_MeetingScreenState>();
-
+  
   const MeetingScreen({Key? key}) : super(key: key);
 
   static void refreshMeetings() {
@@ -133,7 +133,11 @@ class _MeetingScreenState extends State<MeetingScreen> {
     }
     
     // Make sure the key is properly associated with this instance
- 
+    if (MeetingScreen.globalKey.currentState != this) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        MeetingScreen.refreshMeetings();
+      });
+    }
     
     final now = DateTime.now();
     
@@ -475,7 +479,9 @@ class _MeetingCard extends StatelessWidget {
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        '${dateFormat.format(meetingDate)}, ${timeFormat.format(meetingDate)}',
+                        isUpcoming 
+                            ? '${dateFormat.format(meetingDate)}, ${timeFormat.format(meetingDate)}'
+                            : 'Yesterday, ${timeFormat.format(meetingDate)}',
                         style: TextStyle(
                           color: Colors.grey.shade300,
                           fontSize: 13,

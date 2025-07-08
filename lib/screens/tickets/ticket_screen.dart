@@ -410,14 +410,17 @@ class _TicketScreenState extends State<TicketScreen> {
           return Draggable<Map<String, dynamic>>(
             key: ValueKey(ticket['id']),
             data: ticket,
-            feedback: SizedBox(
-              width: MediaQuery.of(context).size.width - 32,
-              child: _TicketCard(
-                ticket: ticket,
-                isAdmin: _isAdmin,
-                onStatusChange: _updateTicketStatus,
-                onApprovalChange: _updateTicketApproval,
-                onTap: () {},
+            feedback: Material(
+              color: Colors.transparent,
+              child: SizedBox(
+                width: MediaQuery.of(context).size.width - 32,
+                child: _TicketCard(
+                  ticket: ticket,
+                  isAdmin: _isAdmin,
+                  onStatusChange: _updateTicketStatus,
+                  onApprovalChange: _updateTicketApproval,
+                  onTap: () {},
+                ),
               ),
             ),
             childWhenDragging: Opacity(

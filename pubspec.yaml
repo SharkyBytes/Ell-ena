@@ -42,7 +42,7 @@ dependencies:
   flutter_dotenv: ^5.1.0
   
   # Local storage
-  shared_preferences: ^2.2.2
+  shared_preferences: ^2.5.3
   
   # URL handling
   url_launcher: ^6.2.5
