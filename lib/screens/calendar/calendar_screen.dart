@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
+import 'dart:math';
 import '../tasks/create_task_screen.dart';
 import '../tickets/create_ticket_screen.dart';
 import '../meetings/create_meeting_screen.dart';
@@ -159,6 +160,33 @@ class _CalendarScreenState extends State<CalendarScreen> {
             _calendarFormat = format;
           });
         },
+        calendarBuilders: CalendarBuilders(
+          markerBuilder: (context, date, events) {
+            if (events.isEmpty) return const SizedBox.shrink();
+            
+            return Positioned(
+              bottom: 1,
+              child: Container(
+                height: 16,
+                width: events.length > 3 ? 35 : (events.length * 8 + 10),
+                decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Center(
+                  child: Text(
+                    '${events.length}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
         calendarStyle: const CalendarStyle(
           defaultTextStyle: TextStyle(color: Colors.white),
           weekendTextStyle: TextStyle(color: Colors.white70),
@@ -173,6 +201,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
             color: Colors.greenAccent,
             shape: BoxShape.circle,
           ),
+          markersMaxCount: 0, // Hide default markers
           markerDecoration: BoxDecoration(
             color: Colors.green,
             shape: BoxShape.circle,
@@ -205,6 +234,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
         final hour = index;
         final time = TimeOfDay(hour: hour, minute: 0);
         final events = _getEventsForHour(hour);
+        
+        // Calculate dynamic height based on number of events (minimum 60)
+        final double timeSlotHeight = events.isEmpty ? 60 : max(60, events.length * 40.0);
 
         return InkWell(
           onTap: () {
@@ -212,7 +244,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
             _showCreateDialog(time);
           },
           child: Container(
-            height: 60,
+            height: timeSlotHeight,
             margin: const EdgeInsets.only(bottom: 1),
             child: Row(
               children: [
@@ -234,11 +266,15 @@ class _CalendarScreenState extends State<CalendarScreen> {
                         ),
                       ),
                     ),
-                    child: Stack(
-                      children: [
-                        ...events.map((event) => _buildEventCard(event)),
-                      ],
-                    ),
+                    child: events.isEmpty
+                        ? Container() // Empty container if no events
+                        : ListView.builder(
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: events.length,
+                            itemBuilder: (context, index) {
+                              return _buildEventCard(events[index]);
+                            },
+                          ),
                   ),
                 ),
               ],

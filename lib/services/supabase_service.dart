@@ -413,6 +413,20 @@ class SupabaseService {
           .from('users')
           .update(data)
           .eq('id', user.id);
+      
+      // Update the cached profile if it exists
+      if (_userProfileCache != null) {
+        // Create a new map to avoid modifying the original
+        final updatedProfile = Map<String, dynamic>.from(_userProfileCache!);
+        
+        // Update the fields in the cache
+        data.forEach((key, value) {
+          updatedProfile[key] = value;
+        });
+        
+        // Save the updated profile to cache
+        await _saveUserProfileToCache(updatedProfile);
+      }
           
       return true;
     } catch (e) {
