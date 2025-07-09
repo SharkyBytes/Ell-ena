@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../services/supabase_service.dart';
+import '../../widgets/custom_widgets.dart';
 
 class MeetingDetailScreen extends StatefulWidget {
   final String meetingId;
@@ -322,7 +323,7 @@ class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
     if (_isLoading) {
       return const Scaffold(
         backgroundColor: Color(0xFF1A1A1A),
-        body: Center(child: CircularProgressIndicator()),
+        body: Center(child: CustomLoading()),
       );
     }
     

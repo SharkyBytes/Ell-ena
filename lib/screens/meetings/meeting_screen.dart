@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../services/supabase_service.dart';
+import '../../widgets/custom_widgets.dart';
 import 'create_meeting_screen.dart';
 import 'meeting_detail_screen.dart';
 
@@ -128,7 +129,7 @@ class _MeetingScreenState extends State<MeetingScreen> {
     if (_isLoading) {
       return const Scaffold(
         backgroundColor: Color(0xFF1A1A1A),
-        body: Center(child: CircularProgressIndicator()),
+        body: Center(child: CustomLoading()),
       );
     }
     

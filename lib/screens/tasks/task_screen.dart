@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../services/supabase_service.dart';
+import '../../widgets/custom_widgets.dart';
 import 'task_detail_screen.dart';
 import 'create_task_screen.dart';
 
@@ -74,7 +75,7 @@ class _TaskScreenState extends State<TaskScreen> {
   
   Future<void> _loadTasks() async {
     try {
-      final tasks = await _supabaseService.getTasks();
+      final tasks = await _supabaseService.getTasks(filterByAssignment: true);
       
       if (mounted) {
         setState(() {
@@ -137,7 +138,7 @@ class _TaskScreenState extends State<TaskScreen> {
     if (_isLoading) {
       return const Scaffold(
         backgroundColor: Color(0xFF1A1A1A),
-        body: Center(child: CircularProgressIndicator()),
+        body: Center(child: CustomLoading()),
       );
     }
     

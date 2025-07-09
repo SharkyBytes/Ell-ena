@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../services/supabase_service.dart';
+import '../../widgets/custom_widgets.dart';
 
 class TaskDetailScreen extends StatefulWidget {
   final String taskId;
@@ -216,7 +217,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
           title: const Text('Task Details'),
           backgroundColor: Colors.green.shade800,
         ),
-        body: const Center(child: CircularProgressIndicator()),
+        body: const Center(child: CustomLoading()),
       );
     }
     

@@ -6,6 +6,7 @@ import '../tasks/create_task_screen.dart';
 import '../tickets/create_ticket_screen.dart';
 import '../meetings/create_meeting_screen.dart';
 import '../../services/supabase_service.dart';
+import '../../widgets/custom_widgets.dart';
 import '../meetings/meeting_detail_screen.dart';
 import '../tasks/task_detail_screen.dart';
 import '../tickets/ticket_detail_screen.dart';
@@ -25,25 +26,52 @@ class _CalendarScreenState extends State<CalendarScreen> {
   final Map<DateTime, List<CalendarEvent>> _events = {};
   final _supabaseService = SupabaseService();
   bool _isLoading = false;
+  String? _currentUserId;
+  bool _isAdmin = false;
 
   @override
   void initState() {
     super.initState();
     _selectedDay = _focusedDay;
-    _loadEvents();
+    _loadCurrentUserInfo();
   }
-
-  Future<void> _loadEvents() async {
+  
+  Future<void> _loadCurrentUserInfo() async {
     setState(() {
       _isLoading = true;
     });
     
     try {
+      final userProfile = await _supabaseService.getCurrentUserProfile();
+      if (userProfile != null) {
+        _currentUserId = _supabaseService.client.auth.currentUser?.id;
+        _isAdmin = userProfile['role'] == 'admin';
+      }
+      
+      await _loadEvents();
+    } catch (e) {
+      debugPrint('Error loading user info: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadEvents() async {
+    try {
+      if (!mounted) return;
+      
+      setState(() {
+        _isLoading = true;
+      });
+      
       // Clear existing events
       _events.clear();
       
-      // Load tasks
-      final tasks = await _supabaseService.getTasks();
+      // Load tasks with assignment filtering
+      final tasks = await _supabaseService.getTasks(filterByAssignment: true);
       for (var task in tasks) {
         if (task['due_date'] != null) {
           final dueDate = DateTime.parse(task['due_date']);
@@ -63,8 +91,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
         }
       }
       
-      // Load tickets
-      final tickets = await _supabaseService.getTickets();
+      // Load tickets with assignment filtering
+      final tickets = await _supabaseService.getTickets(filterByAssignment: true);
       for (var ticket in tickets) {
         if (ticket['created_at'] != null) {
           final createdAt = DateTime.parse(ticket['created_at']);
@@ -84,7 +112,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
         }
       }
       
-      // Load meetings
+      // Load meetings (all meetings are visible to everyone)
       final meetings = await _supabaseService.getMeetings();
       for (var meeting in meetings) {
         if (meeting['meeting_date'] != null) {
@@ -126,7 +154,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFF1A1A1A),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CustomLoading())
           : Column(
               children: [_buildCalendar(), Expanded(child: _buildTimeScale())],
             ),

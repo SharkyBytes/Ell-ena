@@ -690,7 +690,7 @@ class SupabaseService {
   // Task-related methods
   
   // Get tasks for the current user's team
-  Future<List<Map<String, dynamic>>> getTasks() async {
+  Future<List<Map<String, dynamic>>> getTasks({bool filterByAssignment = false}) async {
     try {
       if (!_isInitialized) return [];
       
@@ -702,13 +702,21 @@ class SupabaseService {
       if (userProfile == null || userProfile['team_id'] == null) return [];
       
       final teamId = userProfile['team_id'];
+      final userId = user.id;
+      final isAdmin = userProfile['role'] == 'admin';
       
-      // Get all tasks for this team with creator and assignee info
-      final response = await _client
+      // Create base query
+      final query = _client
           .from('tasks')
           .select('*')
-          .eq('team_id', teamId)
-          .order('created_at', ascending: false);
+          .eq('team_id', teamId);
+      
+      // Filter by assignment if requested and user is not admin
+      if (filterByAssignment && !isAdmin) {
+        query.or('assigned_to.eq.$userId,assigned_to.is.null');
+      }
+      
+      final response = await query.order('created_at', ascending: false);
           
       // Process the response to make it compatible with existing code
       final List<Map<String, dynamic>> processedTasks = [];
@@ -1073,7 +1081,7 @@ class SupabaseService {
   }
   
   // Get tickets for the current user's team
-  Future<List<Map<String, dynamic>>> getTickets() async {
+  Future<List<Map<String, dynamic>>> getTickets({bool filterByAssignment = false}) async {
     try {
       if (!_isInitialized) return [];
       
@@ -1085,13 +1093,21 @@ class SupabaseService {
       if (userProfile == null || userProfile['team_id'] == null) return [];
       
       final teamId = userProfile['team_id'];
+      final userId = user.id;
+      final isAdmin = userProfile['role'] == 'admin';
       
-      // Get all tickets for this team
-      final response = await _client
+      // Create base query
+      final query = _client
           .from('tickets')
           .select('*')
-          .eq('team_id', teamId)
-          .order('created_at', ascending: false);
+          .eq('team_id', teamId);
+      
+      // Filter by assignment if requested and user is not admin
+      if (filterByAssignment && !isAdmin) {
+        query.or('assigned_to.eq.$userId,assigned_to.is.null');
+      }
+      
+      final response = await query.order('created_at', ascending: false);
           
       // Process the response to add creator and assignee info
       final List<Map<String, dynamic>> processedTickets = [];

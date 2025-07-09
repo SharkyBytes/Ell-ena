@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../services/supabase_service.dart';
+import '../../widgets/custom_widgets.dart';
 import 'ticket_detail_screen.dart';
 import 'create_ticket_screen.dart';
 
@@ -57,8 +58,8 @@ class _TicketScreenState extends State<TicketScreen> {
         await _supabaseService.loadTeamMembers(userProfile['team_id']);
       }
       
-      // Initial load of tickets
-      final tickets = await _supabaseService.getTickets();
+      // Initial load of tickets with filtering
+      final tickets = await _supabaseService.getTickets(filterByAssignment: true);
       
       if (mounted) {
         setState(() {
@@ -125,7 +126,7 @@ class _TicketScreenState extends State<TicketScreen> {
     if (_isLoading) {
       return const Scaffold(
         backgroundColor: Color(0xFF1A1A1A),
-        body: Center(child: CircularProgressIndicator()),
+        body: Center(child: CustomLoading()),
       );
     }
     
