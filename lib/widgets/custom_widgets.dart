@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:loading_animation_widget/loading_animation_widget.dart';
 import 'package:skeletonizer/skeletonizer.dart';
+import 'dart:math';
 
 class CustomTextField extends StatelessWidget {
   final TextEditingController controller;
@@ -778,6 +779,238 @@ class WorkspaceLoadingSkeleton extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// Calendar Loading Skeleton
+class CalendarLoadingSkeleton extends StatelessWidget {
+  const CalendarLoadingSkeleton({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Skeletonizer(
+      enabled: true,
+      effect: ShimmerEffect(
+        baseColor: const Color(0xFF2D2D2D),
+        highlightColor: const Color(0xFF3D3D3D),
+      ),
+      child: Column(
+        children: [
+          // Calendar header
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: const BoxDecoration(
+              color: Color(0xFF2D2D2D),
+              borderRadius: BorderRadius.only(
+                bottomLeft: Radius.circular(20),
+                bottomRight: Radius.circular(20),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Month selector
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'July 2023',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1A1A1A),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(Icons.arrow_back, size: 16, color: Colors.white),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1A1A1A),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(Icons.arrow_forward, size: 16, color: Colors.white),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                
+                // Weekday headers
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: const [
+                    Text('M', style: TextStyle(color: Colors.white70)),
+                    Text('T', style: TextStyle(color: Colors.white70)),
+                    Text('W', style: TextStyle(color: Colors.white70)),
+                    Text('T', style: TextStyle(color: Colors.white70)),
+                    Text('F', style: TextStyle(color: Colors.white70)),
+                    Text('S', style: TextStyle(color: Colors.white70)),
+                    Text('S', style: TextStyle(color: Colors.white70)),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                
+                // Calendar grid (4 weeks)
+                for (int week = 0; week < 4; week++)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: List.generate(7, (day) {
+                        // Highlight a random day to simulate selected day
+                        final isSelected = week == 1 && day == 3;
+                        final hasEvents = (week + day) % 3 == 0;
+                        
+                        return Column(
+                          children: [
+                            Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                color: isSelected ? Colors.green.withOpacity(0.2) : Colors.transparent,
+                                shape: BoxShape.circle,
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                '${week * 7 + day + 1}',
+                                style: TextStyle(
+                                  color: isSelected ? Colors.green : Colors.white,
+                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                ),
+                              ),
+                            ),
+                            if (hasEvents)
+                              Container(
+                                margin: const EdgeInsets.only(top: 4),
+                                width: 8,
+                                height: 8,
+                                decoration: const BoxDecoration(
+                                  color: Colors.green,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                          ],
+                        );
+                      }),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          
+          // Time scale and events
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: 8, // Number of time slots
+              itemBuilder: (context, index) {
+                final hour = 9 + index;
+                final hasEvent = index % 2 == 0;
+                
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Time indicator
+                    SizedBox(
+                      width: 60,
+                      child: Text(
+                        '${hour.toString().padLeft(2, '0')}:00',
+                        style: const TextStyle(color: Colors.white70),
+                      ),
+                    ),
+                    
+                    // Event container
+                    Expanded(
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: 16, left: 8),
+                        child: hasEvent ? _buildEventItem() : const SizedBox(height: 40),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildEventItem() {
+    final eventTypes = ['Meeting', 'Task', 'Ticket'];
+    final eventType = eventTypes[Random().nextInt(eventTypes.length)];
+    
+    Color eventColor;
+    IconData eventIcon;
+    
+    switch (eventType) {
+      case 'Meeting':
+        eventColor = Colors.blue;
+        eventIcon = Icons.people;
+        break;
+      case 'Task':
+        eventColor = Colors.green;
+        eventIcon = Icons.task_alt;
+        break;
+      default: // Ticket
+        eventColor = Colors.orange;
+        eventIcon = Icons.confirmation_number;
+    }
+    
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF2D2D2D),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: eventColor.withOpacity(0.3), width: 1),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: eventColor.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(eventIcon, color: eventColor, size: 16),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$eventType Title',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Description for this $eventType',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Colors.white70,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
