@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'screens/splash_screen.dart';
 import 'services/navigation_service.dart';
 import 'services/supabase_service.dart';
+import 'services/ai_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -9,10 +10,13 @@ void main() async {
   try {
     // Initialize Supabase
     await SupabaseService().initialize();
+    
+    // Initialize AI Service
+    await AIService().initialize();
   } catch (e) {
-    debugPrint('Error initializing Supabase: $e');
-    // Continue with the app even if Supabase initialization fails
-    // The app will show appropriate error messages when trying to use Supabase features
+    debugPrint('Error initializing services: $e');
+    // Continue with the app even if initialization fails
+    // The app will show appropriate error messages when trying to use these features
   }
   
   runApp(const MyApp());

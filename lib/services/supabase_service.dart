@@ -131,23 +131,20 @@ class SupabaseService {
   }
   
   // Load team members and cache them
-  Future<void> loadTeamMembers(String teamId) async {
+  Future<void> loadTeamMembers(String teamIdOrCode) async {
     try {
       if (!_isInitialized) return;
       
       // Skip if we already have this team's members cached
-      if (_currentTeamId == teamId && _teamMembersCache.isNotEmpty) {
+      if (_currentTeamId == teamIdOrCode && _teamMembersCache.isNotEmpty) {
         return;
       }
       
-      final response = await _client
-          .from('users')
-          .select('id, full_name, email, role')
-          .eq('team_id', teamId)
-          .order('role', ascending: false); // Put admins first
-          
-      _teamMembersCache = List<Map<String, dynamic>>.from(response);
-      _currentTeamId = teamId;
+      // Use the getTeamMembers function to get the team members
+      final members = await getTeamMembers(teamIdOrCode);
+      
+      _teamMembersCache = members;
+      _currentTeamId = teamIdOrCode;
       
       debugPrint('Team members loaded: ${_teamMembersCache.length}');
     } catch (e) {
@@ -655,23 +652,31 @@ class SupabaseService {
   }
   
   // Get all members of a specific team
-  Future<List<Map<String, dynamic>>> getTeamMembers(String teamId) async {
+  Future<List<Map<String, dynamic>>> getTeamMembers(String teamIdOrCode) async {
     try {
       if (!_isInitialized) return [];
       
       final user = _client.auth.currentUser;
       if (user == null) return [];
       
-      // First, get the UUID of the team from the team code
-      final teamResponse = await _client
-          .from('teams')
-          .select('id')
-          .eq('team_code', teamId)
-          .limit(1);
+      String teamIdUuid;
       
-      if (teamResponse.isEmpty) return [];
-      
-      final teamIdUuid = teamResponse[0]['id'];
+      // Check if the input is already a UUID
+      final uuidPattern = RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', caseSensitive: false);
+      if (uuidPattern.hasMatch(teamIdOrCode)) {
+        teamIdUuid = teamIdOrCode;
+      } else {
+        // First, get the UUID of the team from the team code
+        final teamResponse = await _client
+            .from('teams')
+            .select('id')
+            .eq('team_code', teamIdOrCode)
+            .limit(1);
+        
+        if (teamResponse.isEmpty) return [];
+        
+        teamIdUuid = teamResponse[0]['id'];
+      }
       
       // Then get all users in that team
       final response = await _client
