@@ -258,6 +258,9 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         case 'query_tickets':
           result = await _queryTickets(arguments);
           break;
+        case 'modify_item':
+          result = await _modifyItem(arguments);
+          break;
         default:
           result = {'success': false, 'error': 'Unknown function'};
       }
@@ -478,13 +481,76 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       final status = arguments['status'] as String?;
       final dueDate = arguments['due_date'] as String?;
       final assignedToMe = arguments['assigned_to_me'] as bool? ?? false;
+      final assignedToTeamMember = arguments['assigned_to_team_member'] as String?;
+      
+      // Find team member ID if name was provided
+      String? teamMemberId;
+      if (assignedToTeamMember != null && assignedToTeamMember.isNotEmpty) {
+        // Check if it's already a UUID
+        final uuidPattern = RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', caseSensitive: false);
+        
+        if (uuidPattern.hasMatch(assignedToTeamMember)) {
+          teamMemberId = assignedToTeamMember;
+        } else {
+          // Try to find by name - more flexible matching
+          // First try exact match
+          var matchingMember = _teamMembers.firstWhere(
+            (member) => member['full_name'].toString().toLowerCase() == assignedToTeamMember.toLowerCase(),
+            orElse: () => {},
+          );
+          
+          // If no exact match, try partial match
+          if (matchingMember.isEmpty) {
+            matchingMember = _teamMembers.firstWhere(
+              (member) => member['full_name'].toString().toLowerCase().contains(assignedToTeamMember.toLowerCase()),
+              orElse: () => {},
+            );
+          }
+          
+          // Try matching first name only
+          if (matchingMember.isEmpty) {
+            for (var member in _teamMembers) {
+              final fullName = member['full_name'].toString().toLowerCase();
+              final firstName = fullName.split(' ').first;
+              if (firstName == assignedToTeamMember.toLowerCase()) {
+                matchingMember = member;
+                break;
+              }
+            }
+          }
+          
+          if (matchingMember.isNotEmpty && matchingMember['id'] != null) {
+            teamMemberId = matchingMember['id'];
+            debugPrint('Found team member: ${matchingMember['full_name']} with ID: $teamMemberId');
+          } else {
+            debugPrint('Could not find team member with name: $assignedToTeamMember');
+            debugPrint('Available team members: ${_teamMembers.map((m) => m['full_name']).join(', ')}');
+          }
+        }
+      }
       
       // Get tasks with filters
-      final tasks = await _supabaseService.getTasks(
-        filterByAssignment: assignedToMe,
-        filterByStatus: status != null && status != 'all' ? status : null,
-        filterByDueDate: dueDate,
-      );
+      List<Map<String, dynamic>> tasks;
+      
+      if (teamMemberId != null) {
+        // For team member queries, we need to manually filter results
+        tasks = await _supabaseService.getTasks(
+          filterByAssignment: false, // Don't filter by current user
+          filterByStatus: status != null && status != 'all' ? status : null,
+          filterByDueDate: dueDate,
+        );
+        
+        // Filter by assigned team member
+        tasks = tasks.where((task) => 
+          task['assigned_to'] == teamMemberId
+        ).toList();
+      } else {
+        tasks = await _supabaseService.getTasks(
+          filterByAssignment: assignedToMe,
+          filterByStatus: status != null && status != 'all' ? status : null,
+          filterByDueDate: dueDate,
+        );
+      }
       
       // Update local cache
       if (mounted) {
@@ -514,13 +580,76 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       final status = arguments['status'] as String?;
       final priority = arguments['priority'] as String?;
       final assignedToMe = arguments['assigned_to_me'] as bool? ?? false;
+      final assignedToTeamMember = arguments['assigned_to_team_member'] as String?;
+      
+      // Find team member ID if name was provided
+      String? teamMemberId;
+      if (assignedToTeamMember != null && assignedToTeamMember.isNotEmpty) {
+        // Check if it's already a UUID
+        final uuidPattern = RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', caseSensitive: false);
+        
+        if (uuidPattern.hasMatch(assignedToTeamMember)) {
+          teamMemberId = assignedToTeamMember;
+        } else {
+          // Try to find by name - more flexible matching
+          // First try exact match
+          var matchingMember = _teamMembers.firstWhere(
+            (member) => member['full_name'].toString().toLowerCase() == assignedToTeamMember.toLowerCase(),
+            orElse: () => {},
+          );
+          
+          // If no exact match, try partial match
+          if (matchingMember.isEmpty) {
+            matchingMember = _teamMembers.firstWhere(
+              (member) => member['full_name'].toString().toLowerCase().contains(assignedToTeamMember.toLowerCase()),
+              orElse: () => {},
+            );
+          }
+          
+          // Try matching first name only
+          if (matchingMember.isEmpty) {
+            for (var member in _teamMembers) {
+              final fullName = member['full_name'].toString().toLowerCase();
+              final firstName = fullName.split(' ').first;
+              if (firstName == assignedToTeamMember.toLowerCase()) {
+                matchingMember = member;
+                break;
+              }
+            }
+          }
+          
+          if (matchingMember.isNotEmpty && matchingMember['id'] != null) {
+            teamMemberId = matchingMember['id'];
+            debugPrint('Found team member: ${matchingMember['full_name']} with ID: $teamMemberId');
+          } else {
+            debugPrint('Could not find team member with name: $assignedToTeamMember');
+            debugPrint('Available team members: ${_teamMembers.map((m) => m['full_name']).join(', ')}');
+          }
+        }
+      }
       
       // Get tickets with filters
-      final tickets = await _supabaseService.getTickets(
-        filterByAssignment: assignedToMe,
-        filterByStatus: status != null && status != 'all' ? status : null,
-        filterByPriority: priority != null && priority != 'all' ? priority : null,
-      );
+      List<Map<String, dynamic>> tickets;
+      
+      if (teamMemberId != null) {
+        // For team member queries, we need to manually filter results
+        tickets = await _supabaseService.getTickets(
+          filterByAssignment: false, // Don't filter by current user
+          filterByStatus: status != null && status != 'all' ? status : null,
+          filterByPriority: priority != null && priority != 'all' ? priority : null,
+        );
+        
+        // Filter by assigned team member
+        tickets = tickets.where((ticket) => 
+          ticket['assigned_to'] == teamMemberId
+        ).toList();
+      } else {
+        tickets = await _supabaseService.getTickets(
+          filterByAssignment: assignedToMe,
+          filterByStatus: status != null && status != 'all' ? status : null,
+          filterByPriority: priority != null && priority != 'all' ? priority : null,
+        );
+      }
       
       // Update local cache
       if (mounted) {
@@ -536,6 +665,186 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       };
     } catch (e) {
       debugPrint('Error querying tickets: $e');
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+  
+  // Modify an existing task, ticket, or meeting
+  Future<Map<String, dynamic>> _modifyItem(Map<String, dynamic> arguments) async {
+    try {
+      if (!_supabaseService.isInitialized) {
+        return {'success': false, 'error': 'Service not initialized'};
+      }
+      
+      final itemType = arguments['item_type'] as String;
+      final itemId = arguments['item_id'] as String;
+      final title = arguments['title'] as String?;
+      final description = arguments['description'] as String?;
+      final status = arguments['status'] as String?;
+      final dueDate = arguments['due_date'] as String?;
+      final priority = arguments['priority'] as String?;
+      final meetingDate = arguments['meeting_date'] as String?;
+      final assignedTo = arguments['assigned_to'] as String?;
+      
+      // Get assigned user ID if provided
+      String? assignedToUserId;
+      if (assignedTo != null && assignedTo.isNotEmpty) {
+        // Check if the value is already a valid UUID
+        final uuidPattern = RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', caseSensitive: false);
+        
+        if (uuidPattern.hasMatch(assignedTo)) {
+          // It's already a UUID
+          assignedToUserId = assignedTo;
+        } else {
+          // Try to find by name - more flexible matching
+          // First try exact match
+          var matchingMember = _teamMembers.firstWhere(
+            (member) => member['full_name'].toString().toLowerCase() == assignedTo.toLowerCase(),
+            orElse: () => {},
+          );
+          
+          // If no exact match, try partial match
+          if (matchingMember.isEmpty) {
+            matchingMember = _teamMembers.firstWhere(
+              (member) => member['full_name'].toString().toLowerCase().contains(assignedTo.toLowerCase()),
+              orElse: () => {},
+            );
+          }
+          
+          // Try matching first name only
+          if (matchingMember.isEmpty) {
+            for (var member in _teamMembers) {
+              final fullName = member['full_name'].toString().toLowerCase();
+              final firstName = fullName.split(' ').first;
+              if (firstName == assignedTo.toLowerCase()) {
+                matchingMember = member;
+                break;
+              }
+            }
+          }
+          
+          if (matchingMember.isNotEmpty && matchingMember['id'] != null) {
+            assignedToUserId = matchingMember['id'];
+            debugPrint('Found team member: ${matchingMember['full_name']} with ID: $assignedToUserId');
+          } else {
+            debugPrint('Could not find team member with name: $assignedTo');
+            debugPrint('Available team members: ${_teamMembers.map((m) => m['full_name']).join(', ')}');
+          }
+        }
+      }
+      
+      // Prepare update data based on item type
+      Map<String, dynamic> updateData = {};
+      
+      if (title != null) updateData['title'] = title;
+      if (description != null) updateData['description'] = description;
+      if (status != null) updateData['status'] = status;
+      if (assignedToUserId != null) updateData['assigned_to'] = assignedToUserId;
+      
+      // Add type-specific fields
+      switch (itemType) {
+        case 'task':
+          if (dueDate != null) {
+            try {
+              final parsedDate = DateTime.parse(dueDate);
+              updateData['due_date'] = parsedDate.toIso8601String();
+            } catch (e) {
+              return {'success': false, 'error': 'Invalid due date format'};
+            }
+          }
+          break;
+          
+        case 'ticket':
+          if (priority != null) updateData['priority'] = priority;
+          break;
+          
+        case 'meeting':
+          if (meetingDate != null) {
+            try {
+              final parsedDate = DateTime.parse(meetingDate);
+              updateData['meeting_date'] = parsedDate.toIso8601String();
+            } catch (e) {
+              return {'success': false, 'error': 'Invalid meeting date format'};
+            }
+          }
+          break;
+          
+        default:
+          return {'success': false, 'error': 'Invalid item type'};
+      }
+      
+      if (updateData.isEmpty) {
+        return {'success': false, 'error': 'No changes specified'};
+      }
+      
+      // Update the item in the database
+      Map<String, dynamic> result = {'success': false, 'error': 'No changes made'};
+      
+      switch (itemType) {
+        case 'task':
+          // For tasks, we need to handle different update methods based on what's changing
+          if (status != null) {
+            result = await _supabaseService.updateTaskStatus(
+              taskId: itemId,
+              status: status,
+            );
+          }
+          
+          // Handle other task updates as needed
+          // Note: This is a simplified implementation - for a complete solution,
+          // you would need to add methods to SupabaseService to handle all fields
+          
+          break;
+          
+        case 'ticket':
+          // For tickets, we need to handle different update methods based on what's changing
+          if (status != null) {
+            result = await _supabaseService.updateTicketStatus(
+              ticketId: itemId,
+              status: status,
+            );
+          } else if (priority != null) {
+            result = await _supabaseService.updateTicketPriority(
+              ticketId: itemId,
+              priority: priority,
+            );
+          }
+          
+          // Handle other ticket updates as needed
+          
+          break;
+          
+        case 'meeting':
+          // For meetings, we need to get the current meeting details first
+          final meetingDetails = await _supabaseService.getMeetingDetails(itemId);
+          if (meetingDetails != null) {
+            // Update with new values, keeping existing ones if not provided
+            final updatedMeeting = await _supabaseService.updateMeeting(
+              meetingId: itemId,
+              title: title ?? meetingDetails['title'],
+              description: description ?? meetingDetails['description'],
+              meetingDate: meetingDate != null 
+                ? DateTime.parse(meetingDate) 
+                : DateTime.parse(meetingDetails['meeting_date']),
+              meetingUrl: meetingDetails['meeting_url'],
+            );
+            
+            result = updatedMeeting;
+          }
+          break;
+          
+        default:
+          return {'success': false, 'error': 'Invalid item type'};
+      }
+      
+      // Refresh tasks and tickets if needed
+      if (result['success'] == true) {
+        _loadUserTasksAndTickets();
+      }
+      
+      return result;
+    } catch (e) {
+      debugPrint('Error modifying item: $e');
       return {'success': false, 'error': e.toString()};
     }
   }
@@ -910,16 +1219,49 @@ class _ChatBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Align(
-      alignment: message.isUser ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        decoration: BoxDecoration(
-          color: message.isUser ? Colors.green : Colors.grey.shade800,
-          borderRadius: BorderRadius.circular(20),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+      child: Row(
+        mainAxisAlignment: message.isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (!message.isUser) _buildAvatar(isUser: false),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                color: message.isUser ? Colors.green : Colors.grey.shade800,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(message.text, style: const TextStyle(color: Colors.white)),
+            ),
+          ),
+          const SizedBox(width: 8),
+          if (message.isUser) _buildAvatar(isUser: true),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildAvatar({required bool isUser}) {
+    return Container(
+      width: 36,
+      height: 36,
+      decoration: BoxDecoration(
+        color: isUser ? Colors.green.shade700 : Colors.grey.shade700,
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: isUser ? Colors.green.shade300 : Colors.grey.shade500,
+          width: 1,
         ),
-        child: Text(message.text, style: const TextStyle(color: Colors.white)),
+      ),
+      child: Center(
+        child: Icon(
+          isUser ? Icons.person : Icons.smart_toy,
+          color: Colors.white,
+          size: 20,
+        ),
       ),
     );
   }
@@ -1068,6 +1410,7 @@ class ChatMessage {
   final bool isCard;
   final String? cardType;
   final Map<String, dynamic>? cardData;
+  final String? avatarUrl; // Add avatar URL for profile pictures
 
   ChatMessage({
     required this.text,
@@ -1076,6 +1419,7 @@ class ChatMessage {
     this.isCard = false,
     this.cardType,
     this.cardData,
+    this.avatarUrl,
   });
 }
 
