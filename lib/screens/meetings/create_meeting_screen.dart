@@ -14,18 +14,34 @@ class _CreateMeetingScreenState extends State<CreateMeetingScreen> {
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _urlController = TextEditingController();
+  final _durationController = TextEditingController(text: '60'); // Default to 60 minutes
   final _supabaseService = SupabaseService();
   
   DateTime? _selectedDate;
   TimeOfDay? _selectedTime;
   bool _isLoading = false;
+  bool _isGoogleMeetUrl = true;
   
   @override
   void dispose() {
     _titleController.dispose();
     _descriptionController.dispose();
     _urlController.dispose();
+    _durationController.dispose();
     super.dispose();
+  }
+  
+  // Validate if the URL is a Google Meet URL
+  bool _validateGoogleMeetUrl(String url) {
+    if (url.isEmpty) return true; // Empty URL is valid (not required)
+    return url.contains('meet.google.com');
+  }
+  
+  // Check URL and update state
+  void _checkUrl(String url) {
+    setState(() {
+      _isGoogleMeetUrl = _validateGoogleMeetUrl(url);
+    });
   }
   
   Future<void> _createMeeting() async {
@@ -51,6 +67,18 @@ class _CreateMeetingScreenState extends State<CreateMeetingScreen> {
       return;
     }
     
+    // Validate meeting URL if provided
+    final meetingUrl = _urlController.text.trim();
+    if (meetingUrl.isNotEmpty && !_validateGoogleMeetUrl(meetingUrl)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Only Google Meet URLs are supported for transcription'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    
     setState(() {
       _isLoading = true;
     });
@@ -65,15 +93,24 @@ class _CreateMeetingScreenState extends State<CreateMeetingScreen> {
         _selectedTime!.minute,
       );
       
+      // Parse duration
+      int duration = 60;
+      try {
+        duration = int.parse(_durationController.text.trim());
+        if (duration <= 0) duration = 60;
+      } catch (e) {
+        // Default to 60 if parsing fails
+        duration = 60;
+      }
+      
       final result = await _supabaseService.createMeeting(
         title: _titleController.text.trim(),
         description: _descriptionController.text.trim().isNotEmpty 
             ? _descriptionController.text.trim() 
             : null,
         meetingDate: meetingDateTime,
-        meetingUrl: _urlController.text.trim().isNotEmpty 
-            ? _urlController.text.trim() 
-            : null,
+        meetingUrl: meetingUrl.isNotEmpty ? meetingUrl : null,
+        durationMinutes: duration,
       );
       
       if (mounted) {
@@ -172,258 +209,212 @@ class _CreateMeetingScreenState extends State<CreateMeetingScreen> {
       appBar: AppBar(
         backgroundColor: const Color(0xFF2D2D2D),
         title: const Text('Create Meeting'),
-        actions: [
-          if (_isLoading)
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: SizedBox(
-                height: 24,
-                width: 24,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.white,
-                ),
-              ),
-            )
-          else
-            IconButton(
-              onPressed: _createMeeting,
-              icon: const Icon(Icons.check),
-              tooltip: 'Create Meeting',
-            ),
-        ],
       ),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            // Title
-            TextFormField(
-              controller: _titleController,
-              decoration: InputDecoration(
-                labelText: 'Title',
-                labelStyle: TextStyle(color: Colors.grey.shade400),
-                hintText: 'Enter meeting title (max 25 chars)',
-                hintStyle: TextStyle(color: Colors.grey.shade600),
-                filled: true,
-                fillColor: const Color(0xFF2D2D2D),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-                prefixIcon: const Icon(Icons.title, color: Colors.grey),
-                counterText: '${_titleController.text.length}/25',
-                counterStyle: TextStyle(color: Colors.grey.shade400),
-              ),
-              style: const TextStyle(color: Colors.white),
-              maxLength: 25,
-              onChanged: (value) {
-                setState(() {
-                  // Trigger rebuild to update counter
-                });
-              },
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter a title';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 16),
-            
-            // Description
-            TextFormField(
-              controller: _descriptionController,
-              decoration: InputDecoration(
-                labelText: 'Description (Optional)',
-                labelStyle: TextStyle(color: Colors.grey.shade400),
-                hintText: 'Enter meeting description',
-                hintStyle: TextStyle(color: Colors.grey.shade600),
-                filled: true,
-                fillColor: const Color(0xFF2D2D2D),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-                prefixIcon: const Icon(Icons.description, color: Colors.grey),
-                alignLabelWithHint: true,
-              ),
-              style: const TextStyle(color: Colors.white),
-              maxLines: 3,
-            ),
-            const SizedBox(height: 24),
-            
-            // Date
-            Text(
-              'Date & Time',
-              style: TextStyle(
-                color: Colors.grey.shade400,
-                fontSize: 16,
-              ),
-            ),
-            const SizedBox(height: 8),
-            
-            // Date selector
-            InkWell(
-              onTap: _selectDate,
-              borderRadius: BorderRadius.circular(12),
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF2D2D2D),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator(color: Colors.green))
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(
-                      Icons.calendar_month,
-                      color: Colors.blue.shade400,
-                      size: 24,
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Date',
-                            style: TextStyle(
-                              color: Colors.grey.shade400,
-                              fontSize: 14,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            _selectedDate != null
-                                ? DateFormat('EEEE, MMMM d, yyyy').format(_selectedDate!)
-                                : 'Select date',
-                            style: TextStyle(
-                              color: _selectedDate != null ? Colors.white : Colors.grey.shade600,
-                              fontSize: 16,
-                              fontWeight: _selectedDate != null ? FontWeight.bold : FontWeight.normal,
-                            ),
-                          ),
-                        ],
+                    // Title
+                    TextFormField(
+                      controller: _titleController,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: const InputDecoration(
+                        labelText: 'Title *',
+                        labelStyle: TextStyle(color: Colors.grey),
+                        enabledBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: Colors.grey),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: Colors.green),
+                        ),
                       ),
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return 'Please enter a title';
+                        }
+                        return null;
+                      },
                     ),
-                    const Icon(
-                      Icons.arrow_forward_ios,
-                      color: Colors.grey,
-                      size: 16,
+                    const SizedBox(height: 16),
+                    
+                    // Description
+                    TextFormField(
+                      controller: _descriptionController,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: const InputDecoration(
+                        labelText: 'Description',
+                        labelStyle: TextStyle(color: Colors.grey),
+                        enabledBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: Colors.grey),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: Colors.green),
+                        ),
+                      ),
+                      maxLines: 3,
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    // Date and Time
+                    Row(
+                      children: [
+                        Expanded(
+                          child: InkWell(
+                            onTap: _selectDate,
+                            child: Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                border: Border.all(color: Colors.grey),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.calendar_today, color: Colors.grey),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    _selectedDate == null
+                                        ? 'Select Date *'
+                                        : DateFormat('MMM dd, yyyy').format(_selectedDate!),
+                                    style: TextStyle(
+                                      color: _selectedDate == null ? Colors.grey : Colors.white,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: InkWell(
+                            onTap: _selectTime,
+                            child: Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                border: Border.all(color: Colors.grey),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.access_time, color: Colors.grey),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    _selectedTime == null
+                                        ? 'Select Time *'
+                                        : _selectedTime!.format(context),
+                                    style: TextStyle(
+                                      color: _selectedTime == null ? Colors.grey : Colors.white,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    // Duration
+                    TextFormField(
+                      controller: _durationController,
+                      style: const TextStyle(color: Colors.white),
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Duration (minutes)',
+                        labelStyle: TextStyle(color: Colors.grey),
+                        enabledBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: Colors.grey),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: Colors.green),
+                        ),
+                      ),
+                      validator: (value) {
+                        if (value != null && value.isNotEmpty) {
+                          try {
+                            int duration = int.parse(value);
+                            if (duration <= 0) {
+                              return 'Duration must be greater than 0';
+                            }
+                          } catch (e) {
+                            return 'Please enter a valid number';
+                          }
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    // Meeting URL
+                    TextFormField(
+                      controller: _urlController,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        labelText: 'Google Meet URL',
+                        labelStyle: const TextStyle(color: Colors.grey),
+                        enabledBorder: OutlineInputBorder(
+                          borderSide: BorderSide(
+                            color: _urlController.text.isNotEmpty && !_isGoogleMeetUrl
+                                ? Colors.red
+                                : Colors.grey,
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderSide: BorderSide(
+                            color: _urlController.text.isNotEmpty && !_isGoogleMeetUrl
+                                ? Colors.red
+                                : Colors.green,
+                          ),
+                        ),
+                        suffixIcon: _urlController.text.isNotEmpty
+                            ? Icon(
+                                _isGoogleMeetUrl ? Icons.check_circle : Icons.error,
+                                color: _isGoogleMeetUrl ? Colors.green : Colors.red,
+                              )
+                            : null,
+                      ),
+                      onChanged: (value) {
+                        _checkUrl(value);
+                      },
+                    ),
+                    
+                    // Warning message for non-Google Meet URLs
+                    if (_urlController.text.isNotEmpty && !_isGoogleMeetUrl)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8.0),
+                        child: Text(
+                          'Ellena AI transcription only works with Google Meet URLs',
+                          style: TextStyle(color: Colors.red.shade300, fontSize: 12),
+                        ),
+                      ),
+                    
+                    const SizedBox(height: 24),
+                    
+                    // Create button
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: _createMeeting,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green.shade700,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                        ),
+                        child: const Text(
+                          'Create Meeting',
+                          style: TextStyle(color: Colors.white, fontSize: 16),
+                        ),
+                      ),
                     ),
                   ],
                 ),
               ),
             ),
-            const SizedBox(height: 16),
-            
-            // Time selector
-            InkWell(
-              onTap: _selectTime,
-              borderRadius: BorderRadius.circular(12),
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF2D2D2D),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.access_time,
-                      color: Colors.orange.shade400,
-                      size: 24,
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Time',
-                            style: TextStyle(
-                              color: Colors.grey.shade400,
-                              fontSize: 14,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            _selectedTime != null
-                                ? _selectedTime!.format(context)
-                                : 'Select time',
-                            style: TextStyle(
-                              color: _selectedTime != null ? Colors.white : Colors.grey.shade600,
-                              fontSize: 16,
-                              fontWeight: _selectedTime != null ? FontWeight.bold : FontWeight.normal,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Icon(
-                      Icons.arrow_forward_ios,
-                      color: Colors.grey,
-                      size: 16,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-            
-            // Meeting URL
-            TextFormField(
-              controller: _urlController,
-              decoration: InputDecoration(
-                labelText: 'Meeting URL (Optional)',
-                labelStyle: TextStyle(color: Colors.grey.shade400),
-                hintText: 'Enter Google Meet or other meeting URL',
-                hintStyle: TextStyle(color: Colors.grey.shade600),
-                filled: true,
-                fillColor: const Color(0xFF2D2D2D),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-                prefixIcon: const Icon(Icons.videocam, color: Colors.grey),
-              ),
-              style: const TextStyle(color: Colors.white),
-            ),
-            const SizedBox(height: 32),
-            
-            // Submit button
-            ElevatedButton(
-              onPressed: _isLoading ? null : _createMeeting,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green.shade700,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                disabledBackgroundColor: Colors.grey.shade800,
-              ),
-              child: _isLoading
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Text(
-                      'Create Meeting',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 } 

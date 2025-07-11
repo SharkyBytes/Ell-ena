@@ -30,6 +30,7 @@ class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
   final _urlController = TextEditingController();
   final _transcriptionController = TextEditingController();
   final _aiSummaryController = TextEditingController();
+  final _durationController = TextEditingController(text: '60');
   DateTime? _meetingDate;
   TimeOfDay? _meetingTime;
   
@@ -46,6 +47,7 @@ class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
     _urlController.dispose();
     _transcriptionController.dispose();
     _aiSummaryController.dispose();
+    _durationController.dispose();
     super.dispose();
   }
   
@@ -85,6 +87,7 @@ class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
           _urlController.text = meetingDetails['meeting_url'] ?? '';
           _transcriptionController.text = meetingDetails['transcription'] ?? '';
           _aiSummaryController.text = meetingDetails['ai_summary'] ?? '';
+          _durationController.text = meetingDetails['duration_minutes']?.toString() ?? '60';
           
           _isLoading = false;
         });
@@ -180,6 +183,18 @@ class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
         _meetingTime!.minute,
       );
       
+      // Parse duration
+      int? duration;
+      if (_durationController.text.trim().isNotEmpty) {
+        try {
+          duration = int.parse(_durationController.text.trim());
+          if (duration <= 0) duration = 60;
+        } catch (e) {
+          // Default to 60 if parsing fails
+          duration = 60;
+        }
+      }
+      
       final result = await _supabaseService.updateMeeting(
         meetingId: widget.meetingId,
         title: _titleController.text.trim(),
@@ -188,6 +203,7 @@ class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
         meetingUrl: _urlController.text.trim().isNotEmpty ? _urlController.text.trim() : null,
         transcription: _transcriptionController.text.trim().isNotEmpty ? _transcriptionController.text.trim() : null,
         ai_summary: _aiSummaryController.text.trim().isNotEmpty ? _aiSummaryController.text.trim() : null,
+        durationMinutes: duration,
       );
       
       if (mounted) {
@@ -373,6 +389,28 @@ class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
   Widget _buildMeetingDetails(DateFormat dateFormat, DateFormat timeFormat, bool isUpcoming) {
     final meetingDateTime = DateTime.parse(_meeting!['meeting_date']);
     
+    // Determine transcription status
+    String transcriptionStatus = 'Not started';
+    Color transcriptionStatusColor = Colors.grey.shade600;
+    
+    if (_meeting!['transcription'] != null && _meeting!['transcription'].toString().isNotEmpty) {
+      transcriptionStatus = 'Completed';
+      transcriptionStatusColor = Colors.green.shade400;
+    } else if (_meeting!['transcription_attempted_at'] != null) {
+      transcriptionStatus = 'Attempted';
+      transcriptionStatusColor = Colors.orange.shade400;
+    } else if (_meeting!['bot_started_at'] != null) {
+      transcriptionStatus = 'In progress';
+      transcriptionStatusColor = Colors.blue.shade400;
+    } else if (!isUpcoming && _meeting!['meeting_url'] != null && 
+              _meeting!['meeting_url'].toString().contains('meet.google.com')) {
+      transcriptionStatus = 'Pending';
+      transcriptionStatusColor = Colors.yellow.shade700;
+    } else if (!_meeting!['meeting_url'].toString().contains('meet.google.com')) {
+      transcriptionStatus = 'Not available';
+      transcriptionStatusColor = Colors.red.shade400;
+    }
+    
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -507,86 +545,47 @@ class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
                   ),
                 ],
               ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Icon(
+                    Icons.timer,
+                    color: Colors.purple.shade400,
+                    size: 24,
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Duration',
+                          style: TextStyle(
+                            color: Colors.grey.shade400,
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${_meeting!['duration_minutes'] ?? 60} minutes',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
-        const SizedBox(height: 24),
-        
-        // Meeting URL
-        if (_meeting!['meeting_url'] != null)
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: const Color(0xFF2D2D2D),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: Colors.blue.withOpacity(0.3),
-                width: 1,
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.videocam,
-                      color: Colors.blue,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 8),
-                    const Text(
-                      'Meeting Link',
-                      style: TextStyle(
-                        color: Colors.blue,
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const Spacer(),
-                    IconButton(
-                      onPressed: _copyMeetingUrl,
-                      icon: const Icon(Icons.copy, color: Colors.white),
-                      tooltip: 'Copy URL',
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  _meeting!['meeting_url'],
-                  style: TextStyle(
-                    color: Colors.blue.shade300,
-                    fontSize: 14,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                if (isUpcoming)
-                  const SizedBox(height: 16),
-                if (isUpcoming)
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: _launchMeetingUrl,
-                      icon: const Icon(Icons.open_in_new, color: Colors.white),
-                      label: const Text(
-                        'Join Meeting',
-                        style: TextStyle(color: Colors.white, fontSize: 13),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        if (_meeting!['meeting_url'] != null)
-          const SizedBox(height: 24),
+        const SizedBox(height: 16),
         
         // Description
-        if (_meeting!['description'] != null && _meeting!['description'].trim().isNotEmpty)
+        if (_meeting!['description'] != null && _meeting!['description'].toString().isNotEmpty)
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -600,8 +599,7 @@ class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
                   'Description',
                   style: TextStyle(
                     color: Colors.grey.shade400,
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -615,36 +613,106 @@ class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
               ],
             ),
           ),
-        if (_meeting!['description'] != null && _meeting!['description'].trim().isNotEmpty)
-          const SizedBox(height: 24),
         
-        // Transcription (only for past meetings)
-        if (!isUpcoming && _meeting!['transcription'] != null && _meeting!['transcription'].toString().trim().isNotEmpty)
+        const SizedBox(height: 16),
+        
+        // Meeting URL
+        if (_meeting!['meeting_url'] != null && _meeting!['meeting_url'].toString().isNotEmpty)
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: const Color(0xFF2D2D2D),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: Colors.purple.withOpacity(0.3),
-                width: 1,
-              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Meeting URL',
+                  style: TextStyle(
+                    color: Colors.grey.shade400,
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _meeting!['meeting_url'],
+                        style: TextStyle(
+                          color: Colors.blue.shade300,
+                          fontSize: 14,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      onPressed: _copyMeetingUrl,
+                      icon: const Icon(Icons.copy, color: Colors.white),
+                      tooltip: 'Copy URL',
+                    ),
+                    IconButton(
+                      onPressed: _launchMeetingUrl,
+                      icon: const Icon(Icons.open_in_new, color: Colors.white),
+                      tooltip: 'Open URL',
+                    ),
+                  ],
+                ),
+                
+                // Show transcription status for Google Meet URLs
+                if (_meeting!['meeting_url'].toString().contains('meet.google.com'))
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8.0),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.record_voice_over,
+                          color: transcriptionStatusColor,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Transcription: $transcriptionStatus',
+                          style: TextStyle(
+                            color: transcriptionStatusColor,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        
+        const SizedBox(height: 16),
+        
+        // Transcription
+        if (_meeting!['transcription'] != null && _meeting!['transcription'].toString().isNotEmpty)
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFF2D2D2D),
+              borderRadius: BorderRadius.circular(16),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.record_voice_over,
-                      color: Colors.purple,
+                      color: Colors.green.shade400,
                       size: 20,
                     ),
                     const SizedBox(width: 8),
-                    const Text(
+                    Text(
                       'Meeting Transcription',
                       style: TextStyle(
-                        color: Colors.purple,
+                        color: Colors.grey.shade400,
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
                       ),
@@ -652,46 +720,49 @@ class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
                   ],
                 ),
                 const SizedBox(height: 12),
-                Text(
-                  _meeting!['transcription'],
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1A1A1A),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    _meeting!['transcription'],
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                    ),
                   ),
                 ),
               ],
             ),
           ),
-        if (!isUpcoming && _meeting!['transcription'] != null && _meeting!['transcription'].toString().trim().isNotEmpty)
-          const SizedBox(height: 24),
         
-        // AI Summary (only for past meetings)
-        if (!isUpcoming && _meeting!['ai_summary'] != null && _meeting!['ai_summary'].toString().trim().isNotEmpty)
+        const SizedBox(height: 16),
+        
+        // AI Summary
+        if (_meeting!['ai_summary'] != null && _meeting!['ai_summary'].toString().isNotEmpty)
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: const Color(0xFF2D2D2D),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: Colors.teal.withOpacity(0.3),
-                width: 1,
-              ),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.auto_awesome,
-                      color: Colors.teal,
+                      color: Colors.amber.shade400,
                       size: 20,
                     ),
                     const SizedBox(width: 8),
-                    const Text(
+                    Text(
                       'AI Summary',
                       style: TextStyle(
-                        color: Colors.teal,
+                        color: Colors.grey.shade400,
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
                       ),
@@ -699,83 +770,50 @@ class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
                   ],
                 ),
                 const SizedBox(height: 12),
-                Text(
-                  _meeting!['ai_summary'],
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1A1A1A),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    _meeting!['ai_summary'],
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                    ),
                   ),
                 ),
               ],
             ),
           ),
-        if (!isUpcoming && _meeting!['ai_summary'] != null && _meeting!['ai_summary'].toString().trim().isNotEmpty)
-          const SizedBox(height: 24),
-          
-        // Creator info
-        if (_meeting!['creator'] != null)
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: const Color(0xFF2D2D2D),
-              borderRadius: BorderRadius.circular(16),
+        
+        const SizedBox(height: 24),
+        
+        // Join meeting button
+        if (isUpcoming && _meeting!['meeting_url'] != null && _meeting!['meeting_url'].toString().isNotEmpty)
+          ElevatedButton(
+            onPressed: _launchMeetingUrl,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green.shade700,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
             child: Row(
-              children: [
-                CircleAvatar(
-                  radius: 24,
-                  backgroundColor: Colors.green.shade700,
-                  child: Text(
-                    _meeting!['creator']['full_name'] != null && _meeting!['creator']['full_name'].isNotEmpty
-                        ? _meeting!['creator']['full_name'][0].toUpperCase()
-                        : '?',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: const [
+                Icon(Icons.video_call, color: Colors.white),
+                SizedBox(width: 8),
+                Text(
+                  'Join Meeting',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Created by',
-                        style: TextStyle(
-                          color: Colors.grey.shade400,
-                          fontSize: 12,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _meeting!['creator']['full_name'] ?? 'Unknown',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (_meeting!['creator']['role'] == 'admin')
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.shade400.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      'Admin',
-                      style: TextStyle(
-                        color: Colors.orange.shade400,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
               ],
             ),
           ),
@@ -790,249 +828,149 @@ class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
         // Title
         TextFormField(
           controller: _titleController,
-          decoration: InputDecoration(
-            labelText: 'Title',
-            labelStyle: TextStyle(color: Colors.grey.shade400),
-            hintText: 'Enter meeting title',
-            hintStyle: TextStyle(color: Colors.grey.shade600),
-            filled: true,
-            fillColor: const Color(0xFF2D2D2D),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
-            ),
-            prefixIcon: const Icon(Icons.title, color: Colors.grey),
-          ),
           style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(
+            labelText: 'Title',
+            labelStyle: TextStyle(color: Colors.grey),
+            enabledBorder: OutlineInputBorder(
+              borderSide: BorderSide(color: Colors.grey),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderSide: BorderSide(color: Colors.green),
+            ),
+          ),
         ),
         const SizedBox(height: 16),
         
         // Description
         TextFormField(
           controller: _descriptionController,
-          decoration: InputDecoration(
-            labelText: 'Description',
-            labelStyle: TextStyle(color: Colors.grey.shade400),
-            hintText: 'Enter meeting description',
-            hintStyle: TextStyle(color: Colors.grey.shade600),
-            filled: true,
-            fillColor: const Color(0xFF2D2D2D),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
-            ),
-            prefixIcon: const Icon(Icons.description, color: Colors.grey),
-            alignLabelWithHint: true,
-          ),
           style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(
+            labelText: 'Description',
+            labelStyle: TextStyle(color: Colors.grey),
+            enabledBorder: OutlineInputBorder(
+              borderSide: BorderSide(color: Colors.grey),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderSide: BorderSide(color: Colors.green),
+            ),
+          ),
           maxLines: 3,
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 16),
         
-        // Date
-        InkWell(
-          onTap: _selectDate,
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: const Color(0xFF2D2D2D),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.calendar_month,
-                  color: Colors.blue.shade400,
-                  size: 24,
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+        // Date and Time
+        Row(
+          children: [
+            Expanded(
+              child: InkWell(
+                onTap: _selectDate,
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Row(
                     children: [
+                      const Icon(Icons.calendar_today, color: Colors.grey),
+                      const SizedBox(width: 8),
                       Text(
-                        'Date',
+                        _meetingDate == null
+                            ? 'Select Date'
+                            : DateFormat('MMM dd, yyyy').format(_meetingDate!),
                         style: TextStyle(
-                          color: Colors.grey.shade400,
-                          fontSize: 14,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _meetingDate != null
-                            ? DateFormat('EEEE, MMMM d, yyyy').format(_meetingDate!)
-                            : 'Select date',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
+                          color: _meetingDate == null ? Colors.grey : Colors.white,
                         ),
                       ),
                     ],
                   ),
                 ),
-                const Icon(
-                  Icons.arrow_forward_ios,
-                  color: Colors.grey,
-                  size: 16,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: InkWell(
+                onTap: _selectTime,
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.access_time, color: Colors.grey),
+                      const SizedBox(width: 8),
+                      Text(
+                        _meetingTime == null
+                            ? 'Select Time'
+                            : _meetingTime!.format(context),
+                        style: TextStyle(
+                          color: _meetingTime == null ? Colors.grey : Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        
+        // Duration
+        TextFormField(
+          controller: _durationController,
+          style: const TextStyle(color: Colors.white),
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            labelText: 'Duration (minutes)',
+            labelStyle: TextStyle(color: Colors.grey),
+            enabledBorder: OutlineInputBorder(
+              borderSide: BorderSide(color: Colors.grey),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderSide: BorderSide(color: Colors.green),
             ),
           ),
         ),
         const SizedBox(height: 16),
-        
-        // Time
-        InkWell(
-          onTap: _selectTime,
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: const Color(0xFF2D2D2D),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.access_time,
-                  color: Colors.orange.shade400,
-                  size: 24,
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Time',
-                        style: TextStyle(
-                          color: Colors.grey.shade400,
-                          fontSize: 14,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _meetingTime != null
-                            ? _meetingTime!.format(context)
-                            : 'Select time',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const Icon(
-                  Icons.arrow_forward_ios,
-                  color: Colors.grey,
-                  size: 16,
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 24),
         
         // Meeting URL
         TextFormField(
           controller: _urlController,
-          decoration: InputDecoration(
-            labelText: 'Meeting URL (Optional)',
-            labelStyle: TextStyle(color: Colors.grey.shade400),
-            hintText: 'Enter Google Meet or other meeting URL',
-            hintStyle: TextStyle(color: Colors.grey.shade600),
-            filled: true,
-            fillColor: const Color(0xFF2D2D2D),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
-            ),
-            prefixIcon: const Icon(Icons.videocam, color: Colors.grey),
-          ),
           style: const TextStyle(color: Colors.white),
-        ),
-        const SizedBox(height: 24),
-        
-        // Transcription
-        TextFormField(
-          controller: _transcriptionController,
           decoration: InputDecoration(
-            labelText: 'Transcription (Optional)',
-            labelStyle: TextStyle(color: Colors.grey.shade400),
-            hintText: 'Enter meeting transcription',
-            hintStyle: TextStyle(color: Colors.grey.shade600),
-            filled: true,
-            fillColor: const Color(0xFF2D2D2D),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
+            labelText: 'Meeting URL',
+            labelStyle: const TextStyle(color: Colors.grey),
+            enabledBorder: const OutlineInputBorder(
+              borderSide: BorderSide(color: Colors.grey),
             ),
-            prefixIcon: const Icon(Icons.record_voice_over, color: Colors.grey),
-            alignLabelWithHint: true,
-          ),
-          style: const TextStyle(color: Colors.white),
-          maxLines: 3,
-        ),
-        const SizedBox(height: 24),
-        
-        // AI Summary
-        TextFormField(
-          controller: _aiSummaryController,
-          decoration: InputDecoration(
-            labelText: 'AI Summary (Optional)',
-            labelStyle: TextStyle(color: Colors.grey.shade400),
-            hintText: 'Enter meeting AI summary',
-            hintStyle: TextStyle(color: Colors.grey.shade600),
-            filled: true,
-            fillColor: const Color(0xFF2D2D2D),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
+            focusedBorder: const OutlineInputBorder(
+              borderSide: BorderSide(color: Colors.green),
             ),
-            prefixIcon: const Icon(Icons.auto_awesome, color: Colors.grey),
-            alignLabelWithHint: true,
-          ),
-          style: const TextStyle(color: Colors.white),
-          maxLines: 3,
-        ),
-        const SizedBox(height: 32),
-        
-        // Save button
-        ElevatedButton(
-          onPressed: _updateMeeting,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.green.shade700,
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-          child: const Text(
-            'Save Changes',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-            ),
+            helperText: !_urlController.text.contains('meet.google.com') && _urlController.text.isNotEmpty
+                ? 'Ellena AI transcription only works with Google Meet URLs'
+                : null,
+            helperStyle: TextStyle(color: Colors.red.shade300),
           ),
         ),
         const SizedBox(height: 16),
         
-        // Cancel button
-        TextButton(
-          onPressed: () => setState(() => _isEditing = false),
-          style: TextButton.styleFrom(
-            padding: const EdgeInsets.symmetric(vertical: 16),
-          ),
-          child: const Text(
-            'Cancel',
-            style: TextStyle(
-              color: Colors.white70,
-              fontSize: 16,
+        // Save button
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: _updateMeeting,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green.shade700,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+            ),
+            child: const Text(
+              'Save Changes',
+              style: TextStyle(color: Colors.white, fontSize: 16),
             ),
           ),
         ),

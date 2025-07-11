@@ -1670,6 +1670,7 @@ class SupabaseService {
     String? description,
     required DateTime meetingDate,
     String? meetingUrl,
+    int durationMinutes = 60,
   }) async {
     try {
       if (!_isInitialized) {
@@ -1706,6 +1707,7 @@ class SupabaseService {
         'meeting_url': meetingUrl,
         'team_id': teamId,
         'created_by': user.id,
+        'duration_minutes': durationMinutes,
       };
       
       final response = await _client
@@ -1780,6 +1782,7 @@ class SupabaseService {
     String? meetingUrl,
     String? transcription,
     String? ai_summary,
+    int? durationMinutes,
   }) async {
     try {
       if (!_isInitialized) {
@@ -1806,7 +1809,7 @@ class SupabaseService {
         'updated_at': DateTime.now().toIso8601String(),
       };
       
-      // Add optional fields if provided
+      // Only add these fields if they are provided
       if (transcription != null) {
         meetingData['transcription'] = transcription;
       }
@@ -1815,16 +1818,29 @@ class SupabaseService {
         meetingData['ai_summary'] = ai_summary;
       }
       
-      await _client
+      if (durationMinutes != null) {
+        meetingData['duration_minutes'] = durationMinutes;
+      }
+      
+      final response = await _client
           .from('meetings')
           .update(meetingData)
-          .eq('id', meetingId);
+          .eq('id', meetingId)
+          .select();
           
+      if (response.isEmpty) {
+        return {
+          'success': false,
+          'error': 'Failed to update meeting',
+        };
+      }
+      
       // Refresh meetings
       await getMeetings();
       
       return {
         'success': true,
+        'meeting': response[0],
       };
     } catch (e) {
       debugPrint('Error updating meeting: $e');
