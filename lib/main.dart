@@ -1,5 +1,8 @@
+
 import 'package:flutter/material.dart';
 import 'screens/splash_screen.dart';
+import 'screens/home/home_screen.dart';
+import 'screens/chat/chat_screen.dart';
 import 'services/navigation_service.dart';
 import 'services/supabase_service.dart';
 import 'services/ai_service.dart';
@@ -53,6 +56,27 @@ class MyApp extends StatelessWidget {
         ),
       ),
       home: const SplashScreen(),
+      onGenerateRoute: (settings) {
+        if (settings.name == '/') {
+          return MaterialPageRoute(
+            builder: (context) => const SplashScreen(),
+            settings: settings,
+          );
+        } else if (settings.name == '/home') {
+          final args = settings.arguments as Map<String, dynamic>?;
+          return MaterialPageRoute(
+            builder: (context) => HomeScreen(arguments: args),
+            settings: settings,
+          );
+        } else if (settings.name == '/chat') {
+          final args = settings.arguments as Map<String, dynamic>?;
+          return MaterialPageRoute(
+            builder: (context) => ChatScreen(arguments: args),
+            settings: settings,
+          );
+        }
+        return null;
+      },
     );
   }
 }

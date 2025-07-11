@@ -46,8 +46,10 @@ class AIService {
   Future<Map<String, dynamic>> generateChatResponse(
     String userMessage, 
     List<Map<String, String>> chatHistory,
-    List<Map<String, dynamic>> teamMembers,
-  ) async {
+    List<Map<String, dynamic>> teamMembers, {
+    List<Map<String, dynamic>> userTasks = const [],
+    List<Map<String, dynamic>> userTickets = const [],
+  }) async {
     if (!_isInitialized) {
       await initialize();
     }
@@ -138,6 +140,51 @@ class AIService {
             },
             "required": ["title", "meeting_date"]
           }
+        },
+        {
+          "name": "query_tasks",
+          "description": "Query tasks based on filters",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": ["todo", "in_progress", "completed", "all"],
+                "description": "Filter tasks by status"
+              },
+              "due_date": {
+                "type": "string",
+                "description": "Filter tasks by due date (YYYY-MM-DD)"
+              },
+              "assigned_to_me": {
+                "type": "boolean",
+                "description": "Filter tasks assigned to the current user"
+              }
+            }
+          }
+        },
+        {
+          "name": "query_tickets",
+          "description": "Query tickets based on filters",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": ["open", "in_progress", "resolved", "closed", "all"],
+                "description": "Filter tickets by status"
+              },
+              "priority": {
+                "type": "string",
+                "enum": ["low", "medium", "high", "critical", "all"],
+                "description": "Filter tickets by priority"
+              },
+              "assigned_to_me": {
+                "type": "boolean",
+                "description": "Filter tickets assigned to the current user"
+              }
+            }
+          }
         }
       ];
 
@@ -150,6 +197,31 @@ class AIService {
         teamMemberContext += "- ${member['full_name']} (${member['role']}): ${member['id']}\n";
       }
       
+      // Create task context if available
+      String taskContext = "";
+      if (userTasks.isNotEmpty) {
+        taskContext = "\nCurrent user's tasks:\n";
+        for (var task in userTasks) {
+          String dueDate = task['due_date'] != null 
+              ? DateFormat('yyyy-MM-dd').format(DateTime.parse(task['due_date']))
+              : "No due date";
+          
+          String status = task['status'] ?? 'todo';
+          taskContext += "- ${task['title']} (Status: $status, Due: $dueDate, ID: ${task['id']})\n";
+        }
+      }
+      
+      // Create ticket context if available
+      String ticketContext = "";
+      if (userTickets.isNotEmpty) {
+        ticketContext = "\nCurrent user's tickets:\n";
+        for (var ticket in userTickets) {
+          String priority = ticket['priority'] ?? 'medium';
+          String status = ticket['status'] ?? 'open';
+          ticketContext += "- ${ticket['title']} (Status: $status, Priority: $priority, ID: ${ticket['id']})\n";
+        }
+      }
+      
       // Add system message as the first message with role "model"
       contents.add({
         "role": "model",
@@ -157,7 +229,9 @@ class AIService {
           {
             "text": "You are a helpful assistant for a team collaboration app. You can help users create tasks, tickets, and schedule meetings. When appropriate, call the relevant function to help users.\n\n" +
                     "Current date: ${DateFormat('yyyy-MM-dd').format(DateTime.now())}\n\n" +
-                    "$teamMemberContext\n\n" +
+                    "$teamMemberContext\n" +
+                    "$taskContext" +
+                    "$ticketContext\n" +
                     "Guidelines for creating tasks and tickets:\n" +
                     "1. Create descriptive, clear titles that summarize the task/ticket purpose\n" +
                     "2. Provide detailed descriptions with all relevant information\n" +
@@ -166,7 +240,8 @@ class AIService {
                     "5. If the user doesn't specify who to assign the task/ticket to, leave it unassigned\n" +
                     "6. If the user mentions a team member by name, assign it to that person\n" +
                     "7. Always confirm with the user before creating a task or ticket\n" +
-                    "8. If the user provides minimal information, ask follow-up questions to get necessary details before creating a task/ticket"
+                    "8. If the user provides minimal information, ask follow-up questions to get necessary details before creating a task/ticket\n" +
+                    "9. When users ask about their tasks or tickets, use the query_tasks or query_tickets functions"
           }
         ]
       });

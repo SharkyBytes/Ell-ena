@@ -12,6 +12,8 @@ import '../../widgets/custom_widgets.dart';
 import '../meetings/meeting_detail_screen.dart';
 import '../tasks/task_detail_screen.dart';
 import '../tickets/ticket_detail_screen.dart';
+import '../home/home_screen.dart';
+import '../chat/chat_screen.dart'; // Added import for ChatScreen
 
 class CalendarScreen extends StatefulWidget {
   const CalendarScreen({super.key});
@@ -630,6 +632,13 @@ class _CalendarScreenState extends State<CalendarScreen> {
               Colors.orange,
               () => _handleCreate(EventType.ticket, selectedTime),
             ),
+            const SizedBox(height: 8),
+            _buildDialogOption(
+              'Create with Ell-ena AI',
+              Icons.smart_toy,
+              Colors.purple,
+              () => _handleCreateWithAI(selectedTime),
+            ),
           ],
         ),
       ),
@@ -714,6 +723,36 @@ class _CalendarScreenState extends State<CalendarScreen> {
     if (result == true) {
       await _loadEventsWithCache(); // Use cache loading
     }
+  }
+
+  // Handle creation with AI assistant
+  void _handleCreateWithAI(TimeOfDay selectedTime) {
+    Navigator.of(context).pop(); // Close dialog
+    
+    if (_selectedDay == null) return;
+    
+    final selectedDateTime = DateTime(
+      _selectedDay!.year,
+      _selectedDay!.month,
+      _selectedDay!.day,
+      selectedTime.hour,
+      selectedTime.minute,
+    );
+    
+    // Format the date for the AI
+    final formattedDate = DateFormat('yyyy-MM-dd').format(selectedDateTime);
+    final formattedTime = selectedTime.format(context);
+    final message = 'I need to create a task for $formattedDate at $formattedTime';
+    
+    // Use the NavigationService to navigate to the chat screen
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ChatScreen(
+          arguments: {'initial_message': message}
+        ),
+      ),
+    );
   }
 }
 

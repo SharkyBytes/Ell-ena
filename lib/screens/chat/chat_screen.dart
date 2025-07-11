@@ -1,11 +1,17 @@
+
 import 'package:flutter/material.dart';
 import 'package:ell_ena/services/ai_service.dart';
 import 'package:ell_ena/services/supabase_service.dart';
 import 'package:intl/intl.dart';
 import 'package:loading_animation_widget/loading_animation_widget.dart';
+import '../tasks/task_detail_screen.dart';
+import '../tickets/ticket_detail_screen.dart';
+import '../meetings/meeting_detail_screen.dart';
 
 class ChatScreen extends StatefulWidget {
-  const ChatScreen({super.key});
+  final Map<String, dynamic>? arguments;
+  
+  const ChatScreen({super.key, this.arguments});
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -25,6 +31,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   
   // Team members for assignment
   List<Map<String, dynamic>> _teamMembers = [];
+  List<Map<String, dynamic>> _userTasks = [];
+  List<Map<String, dynamic>> _userTickets = [];
 
   @override
   void initState() {
@@ -35,6 +43,21 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     )..repeat();
     
     _initializeServices();
+    
+    // Handle initial message if provided
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (widget.arguments != null && 
+          widget.arguments!.containsKey('initial_message') &&
+          widget.arguments!['initial_message'] is String) {
+        // Set a small delay to ensure services are initialized
+        Future.delayed(const Duration(milliseconds: 1000), () {
+          if (mounted) {
+            _messageController.text = widget.arguments!['initial_message'] as String;
+            _sendMessage();
+          }
+        });
+      }
+    });
   }
   
   Future<void> _initializeServices() async {
@@ -44,11 +67,19 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         await _aiService.initialize();
       }
       
+      // Initialize Supabase service if needed
+      if (!_supabaseService.isInitialized) {
+        await _supabaseService.initialize();
+      }
+      
       // Load team members for task assignment
       if (_supabaseService.isInitialized) {
         final userProfile = await _supabaseService.getCurrentUserProfile();
         if (userProfile != null && userProfile['team_id'] != null) {
           await _loadTeamMembers(userProfile['team_id']);
+          
+          // Load user's tasks and tickets
+          await _loadUserTasksAndTickets();
         }
       }
       
@@ -66,7 +97,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       debugPrint('Error initializing services: $e');
     }
   }
-
+  
   Future<void> _loadTeamMembers(String teamId) async {
     try {
       final members = await _supabaseService.getTeamMembers(teamId);
@@ -77,6 +108,26 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       }
     } catch (e) {
       debugPrint('Error loading team members: $e');
+    }
+  }
+  
+  // Load user's tasks and tickets
+  Future<void> _loadUserTasksAndTickets() async {
+    try {
+      // Get user's tasks
+      final tasks = await _supabaseService.getTasks(filterByAssignment: true);
+      
+      // Get user's tickets
+      final tickets = await _supabaseService.getTickets(filterByAssignment: true);
+      
+      if (mounted) {
+        setState(() {
+          _userTasks = tasks;
+          _userTickets = tickets;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading user tasks and tickets: $e');
     }
   }
 
@@ -113,6 +164,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         userMessage, 
         chatHistory,
         _teamMembers,
+        userTasks: _userTasks,
+        userTickets: _userTickets,
       );
       
       if (response['type'] == 'function_call') {
@@ -199,6 +252,12 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         case 'create_meeting':
           result = await _createMeeting(arguments);
           break;
+        case 'query_tasks':
+          result = await _queryTasks(arguments);
+          break;
+        case 'query_tickets':
+          result = await _queryTickets(arguments);
+          break;
         default:
           result = {'success': false, 'error': 'Unknown function'};
       }
@@ -221,8 +280,11 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           ),
         );
         
-        // Add card if successful
-        if (result['success'] == true) {
+        // Add card if successful for creation functions
+        if (result['success'] == true && 
+            (functionName == 'create_task' || 
+             functionName == 'create_ticket' || 
+             functionName == 'create_meeting')) {
           _messages.add(
             ChatMessage(
               text: _getCardText(functionName, arguments, result),
@@ -237,6 +299,11 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         
         _isProcessing = false;
       });
+      
+      // Refresh tasks and tickets if we just queried them
+      if (functionName == 'query_tasks' || functionName == 'query_tickets') {
+        _loadUserTasksAndTickets();
+      }
     } catch (e) {
       debugPrint('Error handling function call: $e');
       setState(() {
@@ -401,6 +468,78 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     }
   }
   
+  // Query tasks based on filters
+  Future<Map<String, dynamic>> _queryTasks(Map<String, dynamic> arguments) async {
+    try {
+      if (!_supabaseService.isInitialized) {
+        return {'success': false, 'error': 'Service not initialized'};
+      }
+      
+      final status = arguments['status'] as String?;
+      final dueDate = arguments['due_date'] as String?;
+      final assignedToMe = arguments['assigned_to_me'] as bool? ?? false;
+      
+      // Get tasks with filters
+      final tasks = await _supabaseService.getTasks(
+        filterByAssignment: assignedToMe,
+        filterByStatus: status != null && status != 'all' ? status : null,
+        filterByDueDate: dueDate,
+      );
+      
+      // Update local cache
+      if (mounted) {
+        setState(() {
+          _userTasks = tasks;
+        });
+      }
+      
+      return {
+        'success': true,
+        'tasks': tasks,
+        'count': tasks.length,
+      };
+    } catch (e) {
+      debugPrint('Error querying tasks: $e');
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+  
+  // Query tickets based on filters
+  Future<Map<String, dynamic>> _queryTickets(Map<String, dynamic> arguments) async {
+    try {
+      if (!_supabaseService.isInitialized) {
+        return {'success': false, 'error': 'Service not initialized'};
+      }
+      
+      final status = arguments['status'] as String?;
+      final priority = arguments['priority'] as String?;
+      final assignedToMe = arguments['assigned_to_me'] as bool? ?? false;
+      
+      // Get tickets with filters
+      final tickets = await _supabaseService.getTickets(
+        filterByAssignment: assignedToMe,
+        filterByStatus: status != null && status != 'all' ? status : null,
+        filterByPriority: priority != null && priority != 'all' ? priority : null,
+      );
+      
+      // Update local cache
+      if (mounted) {
+        setState(() {
+          _userTickets = tickets;
+        });
+      }
+      
+      return {
+        'success': true,
+        'tickets': tickets,
+        'count': tickets.length,
+      };
+    } catch (e) {
+      debugPrint('Error querying tickets: $e');
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+  
   // Get card type based on function name
   String _getCardType(String functionName) {
     switch (functionName) {
@@ -442,26 +581,47 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   }
 
   void _navigateToItem(ChatMessage message) {
-    if (message.cardType == 'task') {
-      // Navigate to workspace screen and select tasks tab
-      Navigator.of(context).pushNamedAndRemoveUntil(
-        '/',
-        (route) => false,
-        arguments: {'screen': 2, 'tab': 0}, // 2 for workspace, 0 for tasks tab
-      );
-    } else if (message.cardType == 'ticket') {
-      // Navigate to workspace screen and select tickets tab
-      Navigator.of(context).pushNamedAndRemoveUntil(
-        '/',
-        (route) => false,
-        arguments: {'screen': 2, 'tab': 1}, // 2 for workspace, 1 for tickets tab
-      );
-    } else if (message.cardType == 'meeting') {
-      // Navigate to calendar screen
-      Navigator.of(context).pushNamedAndRemoveUntil(
-        '/',
-        (route) => false,
-        arguments: {'screen': 1}, // 1 for calendar
+    try {
+      if (message.cardType == 'task' && message.cardData != null && message.cardData!['task'] != null) {
+        // Navigate to task detail screen
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => TaskDetailScreen(taskId: message.cardData!['task']['id']),
+          ),
+        );
+      } else if (message.cardType == 'ticket' && message.cardData != null && message.cardData!['ticket'] != null) {
+        // Navigate to ticket detail screen
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => TicketDetailScreen(ticketId: message.cardData!['ticket']['id']),
+          ),
+        );
+      } else if (message.cardType == 'meeting' && message.cardData != null && message.cardData!['meeting'] != null) {
+        // Navigate to meeting detail screen
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => MeetingDetailScreen(meetingId: message.cardData!['meeting']['id']),
+          ),
+        );
+      } else {
+        // Show error message
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not navigate to the item. Details missing.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error navigating to item: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Navigation error: $e'),
+          backgroundColor: Colors.red,
+        ),
       );
     }
   }
@@ -906,7 +1066,7 @@ class ChatMessage {
   final bool isUser;
   final DateTime timestamp;
   final bool isCard;
-  final String? cardType; // 'task', 'ticket', 'meeting'
+  final String? cardType;
   final Map<String, dynamic>? cardData;
 
   ChatMessage({

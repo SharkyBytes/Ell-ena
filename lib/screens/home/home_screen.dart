@@ -9,7 +9,9 @@ import '../chat/chat_screen.dart';
 import 'dashboard_screen.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final Map<String, dynamic>? arguments;
+  
+  const HomeScreen({super.key, this.arguments});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -26,13 +28,7 @@ class _HomeScreenState extends State<HomeScreen>
   late AnimationController _fabController;
   late Animation<double> _fabAnimation;
 
-  final List<Widget> _screens = [
-    const DashboardScreen(),
-    const CalendarScreen(),
-    const WorkspaceScreen(),
-    const ChatScreen(),
-    const ProfileScreen(),
-  ];
+  List<Widget> _screens = [];
 
   @override
   void initState() {
@@ -46,6 +42,42 @@ class _HomeScreenState extends State<HomeScreen>
       curve: Curves.easeOut,
       reverseCurve: Curves.easeIn,
     );
+    
+    // Initialize screens
+    _initializeScreens();
+    
+    // Handle initial arguments if provided
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (widget.arguments != null) {
+        if (widget.arguments!.containsKey('screen') && widget.arguments!['screen'] is int) {
+          setState(() {
+            _selectedIndex = widget.arguments!['screen'];
+          });
+        }
+        
+        // Handle initial message for chat screen
+        if (widget.arguments!.containsKey('initial_message') && 
+            widget.arguments!['initial_message'] is String && 
+            _selectedIndex == 3) {
+          // Update the chat screen with the initial message
+          setState(() {
+            _screens[3] = ChatScreen(
+              arguments: {'initial_message': widget.arguments!['initial_message']}
+            );
+          });
+        }
+      }
+    });
+  }
+  
+  void _initializeScreens() {
+    _screens = [
+      const DashboardScreen(),
+      const CalendarScreen(),
+      const WorkspaceScreen(),
+      const ChatScreen(),
+      const ProfileScreen(),
+    ];
   }
 
   @override
