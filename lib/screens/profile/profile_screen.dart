@@ -1,10 +1,85 @@
 import 'package:flutter/material.dart';
+import '../../services/supabase_service.dart';
+import '../../services/navigation_service.dart';
+import '../auth/login_screen.dart';
+import 'team_members_screen.dart';
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
   @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  final _supabaseService = SupabaseService();
+  bool _isLoading = true;
+  Map<String, dynamic>? _userProfile;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserProfile();
+  }
+
+  Future<void> _loadUserProfile() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    final profile = await _supabaseService.getCurrentUserProfile();
+    
+    if (mounted) {
+      setState(() {
+        _userProfile = profile;
+        _isLoading = false;
+      });
+    }
+  }
+  
+  Future<void> _handleLogout() async {
+    setState(() {
+      _isLoading = true;
+    });
+    
+    try {
+      await _supabaseService.signOut();
+      if (mounted) {
+        NavigationService().navigateToReplacement(const LoginScreen());
+      }
+    } catch (e) {
+      debugPrint('Error logging out: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error logging out: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return Scaffold(
+        backgroundColor: const Color(0xFF1A1A1A),
+        body: const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    final String fullName = _userProfile?['full_name'] ?? 'User';
+    final String role = _userProfile?['role'] ?? 'member';
+    final String roleDisplay = role == 'admin' ? 'Team Admin' : 'Team Member';
+    final String teamName = _userProfile?['teams']?['name'] ?? 'Your Team';
+    final String teamCode = _userProfile?['teams']?['team_code'] ?? '';
+
     return Scaffold(
       backgroundColor: const Color(0xFF1A1A1A),
       body: CustomScrollView(
@@ -13,6 +88,13 @@ class ProfileScreen extends StatelessWidget {
             expandedHeight: 200,
             pinned: true,
             backgroundColor: Colors.transparent,
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.logout, color: Colors.white),
+                onPressed: _handleLogout,
+                tooltip: 'Logout',
+              ),
+            ],
             flexibleSpace: FlexibleSpaceBar(
               background: Container(
                 decoration: BoxDecoration(
@@ -36,39 +118,63 @@ class ProfileScreen extends StatelessWidget {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Container(
-                            width: 100,
-                            height: 100,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: Colors.white,
-                              border: Border.all(color: Colors.white, width: 3),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.2),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 5),
+                          Stack(
+                            alignment: Alignment.bottomRight,
+                            children: [
+                              Container(
+                                width: 100,
+                                height: 100,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: Colors.white,
+                                  border: Border.all(color: Colors.white, width: 3),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.2),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 5),
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            ),
-                            child: const Icon(
-                              Icons.person,
-                              size: 50,
-                              color: Color(0xFF1A1A1A),
-                            ),
+                                child: const Icon(
+                                  Icons.person,
+                                  size: 50,
+                                  color: Color(0xFF1A1A1A),
+                                ),
+                              ),
+                              // Role badge
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: role == 'admin' 
+                                      ? Colors.orange.shade400 
+                                      : Colors.blue.shade400,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: Colors.white, width: 2),
+                                ),
+                                child: Text(
+                                  role == 'admin' ? 'ADMIN' : 'MEMBER',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                           const SizedBox(height: 16),
-                          const Text(
-                            'John Doe',
-                            style: TextStyle(
+                          Text(
+                            fullName,
+                            style: const TextStyle(
                               fontSize: 24,
                               fontWeight: FontWeight.bold,
                               color: Colors.white,
                             ),
                           ),
-                          const Text(
-                            'Product Manager',
-                            style: TextStyle(
+                          Text(
+                            roleDisplay,
+                            style: const TextStyle(
                               fontSize: 16,
                               color: Colors.white70,
                             ),
@@ -87,15 +193,137 @@ class ProfileScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  _buildTeamInfoSection(teamName, teamCode),
+                  const SizedBox(height: 24),
                   _buildStatsSection(),
                   const SizedBox(height: 24),
                   _buildSettingsSection(),
                   const SizedBox(height: 24),
                   _buildPreferencesSection(),
+                  const SizedBox(height: 24),
+                  _buildLogoutButton(),
                 ],
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLogoutButton() {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton.icon(
+        onPressed: _handleLogout,
+        icon: const Icon(Icons.logout, color: Colors.white),
+        label: const Text(
+          'Logout',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.red.shade400,
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTeamInfoSection(String teamName, String teamCode) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF2D2D2D),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 10,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Team Information',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Icon(Icons.groups, color: Colors.white70),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              const Icon(Icons.business, color: Colors.grey),
+              const SizedBox(width: 8),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Team Name',
+                    style: TextStyle(
+                      color: Colors.grey,
+                      fontSize: 12,
+                    ),
+                  ),
+                  Text(
+                    teamName,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          if (teamCode.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                const Icon(Icons.key, color: Colors.grey),
+                const SizedBox(width: 8),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Team ID',
+                      style: TextStyle(
+                        color: Colors.grey,
+                        fontSize: 12,
+                      ),
+                    ),
+                    Text(
+                      teamCode,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -174,6 +402,10 @@ class ProfileScreen extends StatelessWidget {
   }
 
   Widget _buildSettingsSection() {
+    final bool isAdmin = _userProfile?['role'] == 'admin';
+    final String teamId = _userProfile?['teams']?['team_code'] ?? '';
+    final String teamName = _userProfile?['teams']?['name'] ?? 'Your Team';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -213,6 +445,27 @@ class ProfileScreen extends StatelessWidget {
                 subtitle: 'Configure security settings',
                 iconColor: Colors.green.shade400,
               ),
+              // Only show Team Members option for admin users
+              if (isAdmin && teamId.isNotEmpty) ...[
+                const Divider(color: Colors.grey),
+                _buildSettingItem(
+                  icon: Icons.people_outline,
+                  title: 'Team Members',
+                  subtitle: 'Manage your team members',
+                  iconColor: Colors.purple.shade400,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => TeamMembersScreen(
+                          teamId: teamId,
+                          teamName: teamName,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
             ],
           ),
         ),
@@ -272,6 +525,7 @@ class ProfileScreen extends StatelessWidget {
     required String title,
     required String subtitle,
     required Color iconColor,
+    VoidCallback? onTap,
   }) {
     return ListTile(
       leading: Container(
@@ -291,7 +545,8 @@ class ProfileScreen extends StatelessWidget {
       ),
       subtitle: Text(subtitle, style: TextStyle(color: Colors.grey.shade400)),
       trailing: const Icon(Icons.chevron_right, color: Colors.white70),
-      onTap: () {
+      onTap: onTap ?? () {
+        // Default implementation if no specific onTap is provided
         // TODO: Implement settings navigation
       },
     );
