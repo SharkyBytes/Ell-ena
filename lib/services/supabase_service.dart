@@ -1,3 +1,5 @@
+
+
 import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/material.dart';
@@ -131,23 +133,20 @@ class SupabaseService {
   }
   
   // Load team members and cache them
-  Future<void> loadTeamMembers(String teamId) async {
+  Future<void> loadTeamMembers(String teamIdOrCode) async {
     try {
       if (!_isInitialized) return;
       
       // Skip if we already have this team's members cached
-      if (_currentTeamId == teamId && _teamMembersCache.isNotEmpty) {
+      if (_currentTeamId == teamIdOrCode && _teamMembersCache.isNotEmpty) {
         return;
       }
       
-      final response = await _client
-          .from('users')
-          .select('id, full_name, email, role')
-          .eq('team_id', teamId)
-          .order('role', ascending: false); // Put admins first
-          
-      _teamMembersCache = List<Map<String, dynamic>>.from(response);
-      _currentTeamId = teamId;
+      // Use the getTeamMembers function to get the team members
+      final members = await getTeamMembers(teamIdOrCode);
+      
+      _teamMembersCache = members;
+      _currentTeamId = teamIdOrCode;
       
       debugPrint('Team members loaded: ${_teamMembersCache.length}');
     } catch (e) {
@@ -655,23 +654,31 @@ class SupabaseService {
   }
   
   // Get all members of a specific team
-  Future<List<Map<String, dynamic>>> getTeamMembers(String teamId) async {
+  Future<List<Map<String, dynamic>>> getTeamMembers(String teamIdOrCode) async {
     try {
       if (!_isInitialized) return [];
       
       final user = _client.auth.currentUser;
       if (user == null) return [];
       
-      // First, get the UUID of the team from the team code
-      final teamResponse = await _client
-          .from('teams')
-          .select('id')
-          .eq('team_code', teamId)
-          .limit(1);
+      String teamIdUuid;
       
-      if (teamResponse.isEmpty) return [];
-      
-      final teamIdUuid = teamResponse[0]['id'];
+      // Check if the input is already a UUID
+      final uuidPattern = RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', caseSensitive: false);
+      if (uuidPattern.hasMatch(teamIdOrCode)) {
+        teamIdUuid = teamIdOrCode;
+      } else {
+        // First, get the UUID of the team from the team code
+        final teamResponse = await _client
+            .from('teams')
+            .select('id')
+            .eq('team_code', teamIdOrCode)
+            .limit(1);
+        
+        if (teamResponse.isEmpty) return [];
+        
+        teamIdUuid = teamResponse[0]['id'];
+      }
       
       // Then get all users in that team
       final response = await _client
@@ -690,7 +697,11 @@ class SupabaseService {
   // Task-related methods
   
   // Get tasks for the current user's team
-  Future<List<Map<String, dynamic>>> getTasks({bool filterByAssignment = false}) async {
+  Future<List<Map<String, dynamic>>> getTasks({
+    bool filterByAssignment = false,
+    String? filterByStatus,
+    String? filterByDueDate,
+  }) async {
     try {
       if (!_isInitialized) return [];
       
@@ -713,7 +724,29 @@ class SupabaseService {
       
       // Filter by assignment if requested and user is not admin
       if (filterByAssignment && !isAdmin) {
-        query.or('assigned_to.eq.$userId,assigned_to.is.null');
+        query.eq('assigned_to', userId);
+      } else if (filterByAssignment) {
+        // If admin but still wants to see assigned tasks
+        query.eq('assigned_to', userId);
+      }
+      
+      // Filter by status if provided
+      if (filterByStatus != null) {
+        query.eq('status', filterByStatus);
+      }
+      
+      // Filter by due date if provided
+      if (filterByDueDate != null) {
+        try {
+          final date = DateTime.parse(filterByDueDate);
+          final startOfDay = DateTime(date.year, date.month, date.day);
+          final endOfDay = DateTime(date.year, date.month, date.day, 23, 59, 59);
+          
+          query.gte('due_date', startOfDay.toIso8601String());
+          query.lte('due_date', endOfDay.toIso8601String());
+        } catch (e) {
+          debugPrint('Error parsing due date filter: $e');
+        }
       }
       
       final response = await query.order('created_at', ascending: false);
@@ -723,25 +756,21 @@ class SupabaseService {
       for (var task in response) {
         final Map<String, dynamic> processedTask = {...task};
         
-        // Add creator info in the expected format
-        if (task['created_by_user'] != null) {
-          processedTask['creator'] = {
-            'id': task['created_by_user']['id'],
-            'full_name': task['created_by_user']['full_name'],
-          };
+        // Add creator info
+        if (task['created_by'] != null) {
+          final creatorInfo = await _getUserInfo(task['created_by']);
+          if (creatorInfo != null) {
+            processedTask['creator'] = creatorInfo;
+          }
         }
         
-        // Add assignee info in the expected format
-        if (task['assigned_to_user'] != null) {
-          processedTask['assignee'] = {
-            'id': task['assigned_to_user']['id'],
-            'full_name': task['assigned_to_user']['full_name'],
-          };
+        // Add assignee info
+        if (task['assigned_to'] != null) {
+          final assigneeInfo = await _getUserInfo(task['assigned_to']);
+          if (assigneeInfo != null) {
+            processedTask['assignee'] = assigneeInfo;
+          }
         }
-        
-        // Remove the raw join fields
-        processedTask.remove('created_by_user');
-        processedTask.remove('assigned_to_user');
         
         processedTasks.add(processedTask);
       }
@@ -1081,7 +1110,11 @@ class SupabaseService {
   }
   
   // Get tickets for the current user's team
-  Future<List<Map<String, dynamic>>> getTickets({bool filterByAssignment = false}) async {
+  Future<List<Map<String, dynamic>>> getTickets({
+    bool filterByAssignment = false,
+    String? filterByStatus,
+    String? filterByPriority,
+  }) async {
     try {
       if (!_isInitialized) return [];
       
@@ -1104,7 +1137,20 @@ class SupabaseService {
       
       // Filter by assignment if requested and user is not admin
       if (filterByAssignment && !isAdmin) {
-        query.or('assigned_to.eq.$userId,assigned_to.is.null');
+        query.eq('assigned_to', userId);
+      } else if (filterByAssignment) {
+        // If admin but still wants to see assigned tickets
+        query.eq('assigned_to', userId);
+      }
+      
+      // Filter by status if provided
+      if (filterByStatus != null) {
+        query.eq('status', filterByStatus);
+      }
+      
+      // Filter by priority if provided
+      if (filterByPriority != null) {
+        query.eq('priority', filterByPriority);
       }
       
       final response = await query.order('created_at', ascending: false);
@@ -1114,7 +1160,7 @@ class SupabaseService {
       for (var ticket in response) {
         final Map<String, dynamic> processedTicket = {...ticket};
         
-        // Add creator info if available
+        // Add creator info
         if (ticket['created_by'] != null) {
           final creatorInfo = await _getUserInfo(ticket['created_by']);
           if (creatorInfo != null) {
@@ -1122,7 +1168,7 @@ class SupabaseService {
           }
         }
         
-        // Add assignee info if available
+        // Add assignee info
         if (ticket['assigned_to'] != null) {
           final assigneeInfo = await _getUserInfo(ticket['assigned_to']);
           if (assigneeInfo != null) {
@@ -1132,9 +1178,6 @@ class SupabaseService {
         
         processedTickets.add(processedTicket);
       }
-      
-      // Update the stream
-      _ticketsStreamController.add(processedTickets);
           
       return processedTickets;
     } catch (e) {
@@ -1147,21 +1190,35 @@ class SupabaseService {
   Future<Map<String, dynamic>?> _getUserInfo(String userId) async {
     try {
       // First check the cache
-      try {
-        final cachedUser = _teamMembersCache.firstWhere(
-          (member) => member['id'] == userId,
-        );
-        return cachedUser;
-      } catch (e) {
-        // Not found in cache, fetch from database
-        final response = await _client
-            .from('users')
-            .select('id, full_name, email, role')
-            .eq('id', userId)
-            .maybeSingle();
-            
-        return response;
+      final cachedUser = _teamMembersCache.firstWhere(
+        (member) => member['id'] == userId,
+        orElse: () => {},
+      );
+      
+      if (cachedUser.isNotEmpty) {
+        return {
+          'id': cachedUser['id'],
+          'full_name': cachedUser['full_name'],
+          'role': cachedUser['role'],
+        };
       }
+      
+      // If not in cache, fetch from database
+      final response = await _client
+          .from('users')
+          .select('id, full_name, role')
+          .eq('id', userId)
+          .limit(1);
+          
+      if (response.isNotEmpty) {
+        return {
+          'id': response[0]['id'],
+          'full_name': response[0]['full_name'],
+          'role': response[0]['role'],
+        };
+      }
+      
+      return null;
     } catch (e) {
       debugPrint('Error getting user info: $e');
       return null;
@@ -1824,3 +1881,4 @@ class SupabaseService {
     _meetingsStreamController.close();
   }
 } 
+

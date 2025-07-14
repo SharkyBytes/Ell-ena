@@ -49,18 +49,42 @@ class _SplashScreenState extends State<SplashScreen>
       // Check if user is already logged in
       final currentUser = _supabaseService.client.auth.currentUser;
       
+      // Get any arguments from the route
+      final args = ModalRoute.of(context)?.settings.arguments;
+      
       if (currentUser != null) {
         // User is logged in, go directly to home screen
-        NavigationService().navigateToReplacement(const HomeScreen());
+        if (args != null && args is Map<String, dynamic>) {
+          // Pass arguments to home screen using regular navigation
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (context) => HomeScreen(arguments: args),
+            ),
+          );
+        } else {
+          // No arguments, use regular navigation
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (context) => const HomeScreen(),
+            ),
+          );
+        }
       } else {
         // No active session, go to login screen
-        // You can change this to OnboardingScreen if you want first-time users to see onboarding
-        NavigationService().navigateToReplacement(const LoginScreen());
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (context) => const LoginScreen(),
+          ),
+        );
       }
     } catch (e) {
       debugPrint('Error checking session: $e');
       // If there's an error, default to onboarding
-      NavigationService().navigateToReplacement(const OnboardingScreen());
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (context) => const OnboardingScreen(),
+        ),
+      );
     }
   }
 

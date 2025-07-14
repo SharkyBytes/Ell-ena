@@ -1,11 +1,11 @@
 {
-    "name": "ell_ena",
-    "short_name": "ell_ena",
+    "name": "Ell-ena",
+    "short_name": "Ell-ena",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#1A1A1A",
+    "theme_color": "#4CAF50",
+    "description": "Your AI-powered Task Assistant",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
