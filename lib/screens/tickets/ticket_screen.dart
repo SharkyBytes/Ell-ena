@@ -1,71 +1,199 @@
 import 'package:flutter/material.dart';
+import '../../services/supabase_service.dart';
+import 'ticket_detail_screen.dart';
+import 'create_ticket_screen.dart';
 
 class TicketScreen extends StatefulWidget {
+  static final GlobalKey<_TicketScreenState> globalKey = GlobalKey<_TicketScreenState>();
+  
   const TicketScreen({super.key});
+  
+  // Static method to refresh tickets from anywhere
+  static void refreshTickets() {
+    final state = globalKey.currentState;
+    if (state != null) {
+      state.refreshTickets();
+    }
+  }
 
   @override
   State<TicketScreen> createState() => _TicketScreenState();
 }
 
 class _TicketScreenState extends State<TicketScreen> {
-  final List<Ticket> _tickets = [
-    Ticket(
-      id: 'TKT-001',
-      title: 'App crashes on startup',
-      description:
-          'Users reporting app crashes when opening on Android devices',
-      createdAt: DateTime.now().subtract(const Duration(days: 2)),
-      status: TicketStatus.open,
-      priority: TicketPriority.high,
-      category: TicketCategory.bug,
-    ),
-    Ticket(
-      id: 'TKT-002',
-      title: 'Add dark mode support',
-      description: 'Implement system-wide dark mode theme',
-      createdAt: DateTime.now().subtract(const Duration(days: 1)),
-      status: TicketStatus.inProgress,
-      priority: TicketPriority.medium,
-      category: TicketCategory.feature,
-    ),
-    Ticket(
-      id: 'TKT-003',
-      title: 'Update documentation',
-      description: 'Add missing API endpoints to documentation',
-      createdAt: DateTime.now().subtract(const Duration(days: 3)),
-      status: TicketStatus.resolved,
-      priority: TicketPriority.low,
-      category: TicketCategory.documentation,
-    ),
-  ];
-
-  TicketStatus _selectedStatus = TicketStatus.open;
+  final _supabaseService = SupabaseService();
+  bool _isLoading = true;
+  String _selectedStatus = 'open';
+  bool _isAdmin = false;
+  List<Map<String, dynamic>> _tickets = [];
+  
+  @override
+  void initState() {
+    super.initState();
+    _loadInitialData();
+  }
+  
+  // Method to refresh tickets
+  void refreshTickets() {
+    _loadInitialData();
+  }
+  
+  Future<void> _loadInitialData() async {
+    setState(() {
+      _isLoading = true;
+    });
+    
+    try {
+      // Check if user is admin
+      final userProfile = await _supabaseService.getCurrentUserProfile();
+      if (mounted) {
+        setState(() {
+          _isAdmin = userProfile?['role'] == 'admin';
+        });
+      }
+      
+      // Load team members first
+      if (userProfile != null && userProfile['team_id'] != null) {
+        await _supabaseService.loadTeamMembers(userProfile['team_id']);
+      }
+      
+      // Initial load of tickets
+      final tickets = await _supabaseService.getTickets();
+      
+      if (mounted) {
+        setState(() {
+          _tickets = tickets;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading initial data: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+  
+  Future<void> _updateTicketStatus(String ticketId, String status) async {
+    try {
+      await _supabaseService.updateTicketStatus(
+        ticketId: ticketId,
+        status: status,
+      );
+      
+      // Reload tickets after update
+      _loadInitialData();
+    } catch (e) {
+      debugPrint('Error updating ticket status: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error updating ticket status: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+  
+  Future<void> _updateTicketApproval(String ticketId, String approvalStatus) async {
+    try {
+      await _supabaseService.updateTicketApproval(
+        ticketId: ticketId,
+        approvalStatus: approvalStatus,
+      );
+      
+      // Reload tickets after update
+      _loadInitialData();
+    } catch (e) {
+      debugPrint('Error updating ticket approval: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error updating ticket approval: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        backgroundColor: Color(0xFF1A1A1A),
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+    
+    // Make sure the key is properly associated with this instance
+    if (TicketScreen.globalKey.currentState != this) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        TicketScreen.refreshTickets();
+      });
+    }
+    
+    final openTickets = _tickets.where((ticket) => ticket['status'] == 'open').toList();
+    final inProgressTickets = _tickets.where((ticket) => ticket['status'] == 'in_progress').toList();
+    final resolvedTickets = _tickets.where((ticket) => ticket['status'] == 'resolved').toList();
+    final totalTickets = _tickets.length;
+    
     return Scaffold(
       backgroundColor: const Color(0xFF1A1A1A),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () async {
+          final result = await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const CreateTicketScreen(),
+              fullscreenDialog: true,
+            ),
+          );
+          
+          if (result == true) {
+            refreshTickets();
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Ticket created successfully'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        },
+        backgroundColor: Colors.green.shade400,
+        child: const Icon(Icons.add, color: Colors.white),
+      ),
       body: Column(
         children: [
-          _buildHeader(),
+          _buildProgressHeader(
+            openTickets: openTickets.length,
+            inProgressTickets: inProgressTickets.length,
+            resolvedTickets: resolvedTickets.length,
+            totalTickets: totalTickets,
+          ),
           const SizedBox(height: 16),
           _buildStatusTabs(),
-          Expanded(child: _buildTicketList()),
+          Expanded(
+            child: _buildTicketList(
+              _tickets.where((ticket) => ticket['status'] == _selectedStatus).toList()
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildHeader() {
-    final openTickets =
-        _tickets.where((t) => t.status == TicketStatus.open).length;
-    final inProgressTickets =
-        _tickets.where((t) => t.status == TicketStatus.inProgress).length;
-    final resolvedTickets =
-        _tickets.where((t) => t.status == TicketStatus.resolved).length;
-
+  Widget _buildProgressHeader({
+    required int openTickets,
+    required int inProgressTickets,
+    required int resolvedTickets,
+    required int totalTickets,
+  }) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
       decoration: const BoxDecoration(
         color: Color(0xFF2D2D2D),
         borderRadius: BorderRadius.only(
@@ -76,312 +204,633 @@ class _TicketScreenState extends State<TicketScreen> {
       child: Column(
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              _buildStatCard(
-                'Open',
-                openTickets,
-                Icons.error_outline,
-                Colors.red.shade400,
+              _buildProgressStat(
+                label: 'Open',
+                value: openTickets,
+                total: totalTickets > 0 ? totalTickets : 1,
+                color: Colors.blue.shade400,
               ),
-              _buildStatCard(
-                'In Progress',
-                inProgressTickets,
-                Icons.pending_actions,
-                Colors.orange.shade400,
+              _buildProgressStat(
+                label: 'In Progress',
+                value: inProgressTickets,
+                total: totalTickets > 0 ? totalTickets : 1,
+                color: Colors.orange.shade400,
               ),
-              _buildStatCard(
-                'Resolved',
-                resolvedTickets,
-                Icons.check_circle_outline,
-                Colors.green.shade400,
+              _buildProgressStat(
+                label: 'Resolved',
+                value: resolvedTickets,
+                total: totalTickets > 0 ? totalTickets : 1,
+                color: Colors.green.shade400,
               ),
             ],
+          ),
+          const SizedBox(height: 16),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Stack(
+              children: [
+                Container(height: 8, color: Colors.grey.shade800),
+                Row(
+                  children: [
+                    _buildProgressBar(
+                      width: totalTickets > 0 ? openTickets / totalTickets : 0,
+                      color: Colors.blue.shade400,
+                    ),
+                    _buildProgressBar(
+                      width: totalTickets > 0 ? inProgressTickets / totalTickets : 0,
+                      color: Colors.orange.shade400,
+                    ),
+                    _buildProgressBar(
+                      width: totalTickets > 0 ? resolvedTickets / totalTickets : 0,
+                      color: Colors.green.shade400,
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildStatCard(String label, int count, IconData icon, Color color) {
+  Widget _buildProgressStat({
+    required String label,
+    required int value,
+    required int total,
+    required Color color,
+  }) {
+    final percentage = (value / total * 100).round();
+    return Column(
+      children: [
+        Text(
+          '$percentage%',
+          style: TextStyle(
+            color: color,
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: const TextStyle(color: Colors.white70, fontSize: 12),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildProgressBar({required double width, required Color color}) {
+    final screenWidth = MediaQuery.of(context).size.width - 32; // Total available width
     return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, color: color, size: 24),
-          const SizedBox(height: 8),
-          Text(
-            count.toString(),
-            style: TextStyle(
-              color: color,
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: const TextStyle(color: Colors.white70, fontSize: 12),
-          ),
-        ],
-      ),
+      height: 8,
+      width: screenWidth * width,
+      color: color,
     );
   }
 
   Widget _buildStatusTabs() {
+    final statusOptions = [
+      {'id': 'open', 'label': 'Open', 'color': Colors.blue},
+      {'id': 'in_progress', 'label': 'In Progress', 'color': Colors.orange},
+      {'id': 'resolved', 'label': 'Resolved', 'color': Colors.green},
+    ];
+    
     return Container(
       height: 40,
       margin: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
-        children:
-            TicketStatus.values.map((status) {
-              final isSelected = status == _selectedStatus;
-              return Expanded(
-                child: GestureDetector(
-                  onTap: () => setState(() => _selectedStatus = status),
-                  child: Container(
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color:
-                          isSelected
-                              ? status.color.withOpacity(0.2)
-                              : Colors.transparent,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: isSelected ? status.color : Colors.transparent,
-                        width: 2,
-                      ),
+        children: statusOptions.map((status) {
+          final isSelected = status['id'] == _selectedStatus;
+          final color = status['color'] as MaterialColor;
+          
+          return Expanded(
+            child: DragTarget<Map<String, dynamic>>(
+              builder: (context, candidateData, rejectedData) {
+                return Container(
+                  decoration: BoxDecoration(
+                    color: isSelected 
+                        ? color.withOpacity(0.2) 
+                        : candidateData.isNotEmpty 
+                            ? color.withOpacity(0.1) 
+                            : Colors.transparent,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: isSelected ? color : Colors.transparent,
+                      width: 2,
                     ),
-                    child: Text(
-                      status.label,
-                      style: TextStyle(
-                        color: isSelected ? status.color : Colors.white70,
-                        fontWeight:
-                            isSelected ? FontWeight.bold : FontWeight.normal,
+                  ),
+                  child: InkWell(
+                    onTap: () => setState(() => _selectedStatus = status['id'] as String),
+                    borderRadius: BorderRadius.circular(20),
+                    child: Center(
+                      child: Text(
+                        status['label'] as String,
+                        style: TextStyle(
+                          color: isSelected ? color : Colors.white70,
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                        ),
                       ),
                     ),
                   ),
-                ),
-              );
-            }).toList(),
+                );
+              },
+              onAccept: (ticket) {
+                final newStatus = status['id'] as String;
+                if (ticket['status'] != newStatus) {
+                  _updateTicketStatus(ticket['id'], newStatus);
+                }
+              },
+              onWillAccept: (data) => data != null,
+            ),
+          );
+        }).toList(),
       ),
     );
   }
 
-  Widget _buildTicketList() {
-    final filteredTickets =
-        _tickets.where((ticket) => ticket.status == _selectedStatus).toList();
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: filteredTickets.length,
-      itemBuilder: (context, index) {
-        final ticket = filteredTickets[index];
-        return _TicketCard(ticket: ticket);
-      },
+  Widget _buildTicketList(List<Map<String, dynamic>> filteredTickets) {
+    if (filteredTickets.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              _selectedStatus == 'open' ? Icons.report_problem_outlined :
+              _selectedStatus == 'in_progress' ? Icons.pending_actions_outlined :
+              Icons.task_alt_outlined,
+              size: 80,
+              color: Colors.grey.shade600,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'No tickets found',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey.shade400,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _selectedStatus == 'open' ? 'Create new tickets to get started' :
+              _selectedStatus == 'in_progress' ? 'Move tickets here when you start working on them' :
+              'Resolved tickets will appear here',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey.shade600,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            _buildStatusChangeHint(),
+          ],
+        ),
+      );
+    }
+    
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+      child: ReorderableListView.builder(
+        itemCount: filteredTickets.length,
+        onReorder: (oldIndex, newIndex) {
+          // Just for visual reordering, no status change
+          setState(() {
+            if (oldIndex < newIndex) {
+              newIndex -= 1;
+            }
+            final item = filteredTickets.removeAt(oldIndex);
+            filteredTickets.insert(newIndex, item);
+          });
+        },
+        itemBuilder: (context, index) {
+          final ticket = filteredTickets[index];
+          return Draggable<Map<String, dynamic>>(
+            key: ValueKey(ticket['id']),
+            data: ticket,
+            feedback: SizedBox(
+              width: MediaQuery.of(context).size.width - 32,
+              child: _TicketCard(
+                ticket: ticket,
+                isAdmin: _isAdmin,
+                onStatusChange: _updateTicketStatus,
+                onApprovalChange: _updateTicketApproval,
+                onTap: () {},
+              ),
+            ),
+            childWhenDragging: Opacity(
+              opacity: 0.5,
+              child: _TicketCard(
+                ticket: ticket,
+                isAdmin: _isAdmin,
+                onStatusChange: _updateTicketStatus,
+                onApprovalChange: _updateTicketApproval,
+                onTap: () {},
+              ),
+            ),
+            child: _TicketCard(
+              ticket: ticket,
+              isAdmin: _isAdmin,
+              onStatusChange: _updateTicketStatus,
+              onApprovalChange: _updateTicketApproval,
+              onTap: () async {
+                final result = await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => TicketDetailScreen(ticketId: ticket['id']),
+                  ),
+                );
+                
+                if (result == true) {
+                  // Ticket was updated in detail screen, refresh tickets
+                  _loadInitialData();
+                }
+              },
+            ),
+          );
+        },
+      ),
+    );
+  }
+  
+  Widget _buildStatusChangeHint() {
+    final nextStatus = _selectedStatus == 'open' 
+        ? 'In Progress' 
+        : _selectedStatus == 'in_progress' 
+            ? 'Resolved' 
+            : 'Open';
+    
+    final nextStatusId = _selectedStatus == 'open' 
+        ? 'in_progress' 
+        : _selectedStatus == 'in_progress' 
+            ? 'resolved' 
+            : 'open';
+    
+    final color = _selectedStatus == 'open' 
+        ? Colors.orange 
+        : _selectedStatus == 'in_progress' 
+            ? Colors.green 
+            : Colors.blue;
+    
+    return ElevatedButton.icon(
+      onPressed: () => setState(() => _selectedStatus = nextStatusId),
+      icon: Icon(
+        _selectedStatus == 'open' ? Icons.arrow_forward : 
+        _selectedStatus == 'in_progress' ? Icons.check : 
+        Icons.refresh,
+        color: Colors.white,
+        size: 16,
+      ),
+      label: Text(
+        'View $nextStatus Tickets', 
+        style: const TextStyle(color: Colors.white),
+      ),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: color,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      ),
     );
   }
 }
 
 class _TicketCard extends StatelessWidget {
-  final Ticket ticket;
+  final Map<String, dynamic> ticket;
+  final bool isAdmin;
+  final Function(String, String) onStatusChange;
+  final Function(String, String) onApprovalChange;
+  final VoidCallback onTap;
 
-  const _TicketCard({required this.ticket});
+  const _TicketCard({
+    required this.ticket,
+    required this.isAdmin,
+    required this.onStatusChange,
+    required this.onApprovalChange,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF2D2D2D),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: ticket.priority.color.withOpacity(0.1),
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(16),
-                topRight: Radius.circular(16),
-              ),
+    final String title = ticket['title'] ?? 'Untitled Ticket';
+    final String description = ticket['description'] ?? 'No description';
+    // Limit description to 75 words
+    final String limitedDescription = _limitWords(description, 75);
+    final String status = ticket['status'] ?? 'open';
+    final String priority = ticket['priority'] ?? 'medium';
+    final String category = ticket['category'] ?? 'Bug';
+    final String approvalStatus = ticket['approval_status'] ?? 'pending';
+    final String ticketNumber = ticket['ticket_number'] ?? 'TKT-???';
+    final String createdAt = _formatDate(ticket['created_at']);
+    
+    // Get names from the team members cache
+    final supabaseService = SupabaseService();
+    String creatorName;
+    if (ticket['created_by'] != null) {
+      if (supabaseService.isCurrentUser(ticket['created_by'])) {
+        creatorName = 'You';
+      } else if (ticket['creator'] != null && ticket['creator']['full_name'] != null) {
+        creatorName = ticket['creator']['full_name'];
+      } else {
+        creatorName = supabaseService.getUserNameById(ticket['created_by']);
+      }
+    } else {
+      creatorName = 'Unknown';
+    }
+    
+    // Determine colors and icons based on priority
+    Color priorityColor;
+    IconData priorityIcon;
+    switch (priority.toLowerCase()) {
+      case 'high':
+        priorityColor = Colors.red.shade400;
+        priorityIcon = Icons.priority_high;
+        break;
+      case 'medium':
+        priorityColor = Colors.orange.shade400;
+        priorityIcon = Icons.remove_circle_outline;
+        break;
+      case 'low':
+        priorityColor = Colors.green.shade400;
+        priorityIcon = Icons.arrow_downward;
+        break;
+      default:
+        priorityColor = Colors.grey;
+        priorityIcon = Icons.help_outline;
+    }
+    
+    // Determine category icon
+    IconData categoryIcon;
+    switch (category.toLowerCase()) {
+      case 'bug':
+        categoryIcon = Icons.bug_report;
+        break;
+      case 'feature request':
+        categoryIcon = Icons.lightbulb_outline;
+        break;
+      case 'ui/ux':
+        categoryIcon = Icons.design_services;
+        break;
+      case 'performance':
+        categoryIcon = Icons.speed;
+        break;
+      case 'documentation':
+        categoryIcon = Icons.description;
+        break;
+      case 'security':
+        categoryIcon = Icons.security;
+        break;
+      default:
+        categoryIcon = Icons.category;
+    }
+    
+    // Determine colors based on approval status
+    final Color approvalColor = approvalStatus == 'pending' 
+        ? Colors.grey 
+        : approvalStatus == 'approved' 
+            ? Colors.green 
+            : Colors.red;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF2D2D2D),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 10,
+              offset: const Offset(0, 5),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      ticket.priority.icon,
-                      color: ticket.priority.color,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      ticket.priority.label,
-                      style: TextStyle(
-                        color: ticket.priority.color,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: priorityColor.withOpacity(0.1),
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(16),
+                  topRight: Radius.circular(16),
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: ticket.category.color.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
                     children: [
                       Icon(
-                        ticket.category.icon,
-                        color: ticket.category.color,
-                        size: 16,
+                        priorityIcon,
+                        color: priorityColor,
+                        size: 20,
                       ),
-                      const SizedBox(width: 4),
+                      const SizedBox(width: 8),
                       Text(
-                        ticket.category.label,
+                        priority.toUpperCase(),
                         style: TextStyle(
-                          color: ticket.category.color,
-                          fontSize: 12,
+                          color: priorityColor,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                     ],
                   ),
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      ticket.id,
-                      style: TextStyle(
-                        color: Colors.grey.shade400,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
+                  Row(
+                    children: [
+                      if (isAdmin && approvalStatus == 'pending')
+                        Row(
+                          children: [
+                            IconButton(
+                              onPressed: () => onApprovalChange(ticket['id'], 'approved'),
+                              icon: Icon(Icons.check_circle, color: Colors.green.shade400, size: 20),
+                              tooltip: 'Approve',
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton(
+                              onPressed: () => onApprovalChange(ticket['id'], 'rejected'),
+                              icon: Icon(Icons.cancel, color: Colors.red.shade400, size: 20),
+                              tooltip: 'Reject',
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                            ),
+                            const SizedBox(width: 12),
+                          ],
+                        ),
+                      Text(
+                        createdAt,
+                        style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      width: 4,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade400,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      ticket.formattedDate,
-                      style: TextStyle(
-                        color: Colors.grey.shade400,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  ticket.title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
+                    ],
                   ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  ticket.description,
-                  style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    ticketNumber,
+                    style: TextStyle(
+                      color: Colors.grey.shade500,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          title,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: approvalColor.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          approvalStatus.toUpperCase(),
+                          style: TextStyle(
+                            color: approvalColor,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    limitedDescription,
+                    style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.purple.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              categoryIcon,
+                              color: Colors.purple.shade300,
+                              size: 14,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              category,
+                              style: TextStyle(
+                                color: Colors.purple.shade300,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 12,
+                            backgroundColor: Colors.blue.shade700,
+                            child: Text(
+                              creatorName.isNotEmpty ? creatorName[0].toUpperCase() : '?',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Created by $creatorName',
+                            style: TextStyle(
+                              color: Colors.grey.shade400,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            // Drag handle indicator
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade800,
+                borderRadius: const BorderRadius.only(
+                  bottomLeft: Radius.circular(16),
+                  bottomRight: Radius.circular(16),
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.drag_indicator,
+                    color: Colors.grey.shade500,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Drag to change status',
+                    style: TextStyle(
+                      color: Colors.grey.shade500,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
-}
-
-class Ticket {
-  final String id;
-  final String title;
-  final String description;
-  final DateTime createdAt;
-  final TicketStatus status;
-  final TicketPriority priority;
-  final TicketCategory category;
-
-  Ticket({
-    required this.id,
-    required this.title,
-    required this.description,
-    required this.createdAt,
-    required this.status,
-    required this.priority,
-    required this.category,
-  });
-
-  String get formattedDate {
-    return '${createdAt.day}/${createdAt.month}/${createdAt.year}';
+  
+  String _formatDate(String? dateString) {
+    if (dateString == null) return '';
+    
+    try {
+      final date = DateTime.parse(dateString);
+      return '${date.day}/${date.month}/${date.year}';
+    } catch (e) {
+      return '';
+    }
   }
-}
-
-enum TicketStatus {
-  open(Colors.red, 'Open'),
-  inProgress(Colors.orange, 'In Progress'),
-  resolved(Colors.green, 'Resolved');
-
-  final MaterialColor color;
-  final String label;
-
-  const TicketStatus(this.color, this.label);
-}
-
-enum TicketPriority {
-  high(Icons.priority_high, Colors.red, 'High'),
-  medium(Icons.radio_button_checked, Colors.orange, 'Medium'),
-  low(Icons.arrow_downward, Colors.green, 'Low');
-
-  final IconData icon;
-  final MaterialColor color;
-  final String label;
-
-  const TicketPriority(this.icon, this.color, this.label);
-}
-
-enum TicketCategory {
-  bug(Icons.bug_report, Colors.red, 'Bug'),
-  feature(Icons.lightbulb, Colors.green, 'Feature'),
-  documentation(Icons.description, Colors.blue, 'Docs');
-
-  final IconData icon;
-  final MaterialColor color;
-  final String label;
-
-  const TicketCategory(this.icon, this.color, this.label);
+  
+  String _limitWords(String text, int wordLimit) {
+    if (text.isEmpty) return text;
+    
+    final words = text.split(' ');
+    if (words.length <= wordLimit) return text;
+    
+    return '${words.take(wordLimit).join(' ')}...';
+  }
 }
