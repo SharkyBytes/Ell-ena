@@ -16,10 +16,12 @@ class SupabaseService {
   // Stream controllers for real-time updates
   final _tasksStreamController = StreamController<List<Map<String, dynamic>>>.broadcast();
   final _ticketsStreamController = StreamController<List<Map<String, dynamic>>>.broadcast();
+  final _meetingsStreamController = StreamController<List<Map<String, dynamic>>>.broadcast();
   
   // Getters for streams
   Stream<List<Map<String, dynamic>>> get tasksStream => _tasksStreamController.stream;
   Stream<List<Map<String, dynamic>>> get ticketsStream => _ticketsStreamController.stream;
+  Stream<List<Map<String, dynamic>>> get meetingsStream => _meetingsStreamController.stream;
   
   factory SupabaseService() {
     return _instance;
@@ -1460,9 +1462,275 @@ class SupabaseService {
     }
   }
   
+  // Meetings-related methods
+  
+  // Get meetings for the current user's team
+  Future<List<Map<String, dynamic>>> getMeetings() async {
+    try {
+      if (!_isInitialized) return [];
+      
+      final user = _client.auth.currentUser;
+      if (user == null) return [];
+      
+      // Get the user's team ID
+      final userProfile = await getCurrentUserProfile();
+      if (userProfile == null || userProfile['team_id'] == null) return [];
+      
+      final teamId = userProfile['team_id'];
+      
+      debugPrint('Fetching meetings for team ID: $teamId');
+      
+      // Get all meetings for this team
+      final response = await _client
+          .from('meetings')
+          .select('*')
+          .eq('team_id', teamId)
+          .order('meeting_date', ascending: true);
+      
+      debugPrint('Raw meetings response: ${response.length} meetings found');
+          
+      // Process the response to add creator info
+      final List<Map<String, dynamic>> processedMeetings = [];
+      for (var meeting in response) {
+        final Map<String, dynamic> processedMeeting = {...meeting};
+        
+        // Add creator info if available
+        if (meeting['created_by'] != null) {
+          final creatorInfo = await _getUserInfo(meeting['created_by']);
+          if (creatorInfo != null) {
+            processedMeeting['creator'] = creatorInfo;
+          }
+        }
+        
+        processedMeetings.add(processedMeeting);
+      }
+      
+      debugPrint('Processed meetings: ${processedMeetings.length}');
+      
+      // Update the stream
+      _meetingsStreamController.add(processedMeetings);
+          
+      return processedMeetings;
+    } catch (e) {
+      debugPrint('Error getting meetings: $e');
+      return [];
+    }
+  }
+  
+  // Create a new meeting
+  Future<Map<String, dynamic>> createMeeting({
+    required String title,
+    String? description,
+    required DateTime meetingDate,
+    String? meetingUrl,
+  }) async {
+    try {
+      if (!_isInitialized) {
+        return {
+          'success': false,
+          'error': 'Supabase is not initialized',
+        };
+      }
+      
+      final user = _client.auth.currentUser;
+      if (user == null) {
+        return {
+          'success': false,
+          'error': 'User not authenticated',
+        };
+      }
+      
+      // Get the user's team ID
+      final userProfile = await getCurrentUserProfile();
+      if (userProfile == null || userProfile['team_id'] == null) {
+        return {
+          'success': false,
+          'error': 'User not associated with a team',
+        };
+      }
+      
+      final teamId = userProfile['team_id'];
+      
+      // Create the meeting
+      final Map<String, dynamic> meetingData = {
+        'title': title,
+        'description': description,
+        'meeting_date': meetingDate.toIso8601String(),
+        'meeting_url': meetingUrl,
+        'team_id': teamId,
+        'created_by': user.id,
+      };
+      
+      final response = await _client
+          .from('meetings')
+          .insert(meetingData)
+          .select();
+          
+      if (response.isEmpty) {
+        return {
+          'success': false,
+          'error': 'Failed to create meeting',
+        };
+      }
+      
+      // Refresh meetings
+      await getMeetings();
+      
+      return {
+        'success': true,
+        'meeting': response[0],
+      };
+    } catch (e) {
+      debugPrint('Error creating meeting: $e');
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
+    }
+  }
+  
+  // Get meeting details
+  Future<Map<String, dynamic>?> getMeetingDetails(String meetingId) async {
+    try {
+      if (!_isInitialized) return null;
+      
+      final user = _client.auth.currentUser;
+      if (user == null) return null;
+      
+      // Get meeting details
+      final meetingResponse = await _client
+          .from('meetings')
+          .select('*')
+          .eq('id', meetingId)
+          .single();
+      
+      // Get creator info
+      String? createdById = meetingResponse['created_by'];
+      Map<String, dynamic>? creator;
+      
+      if (createdById != null) {
+        creator = await _getUserInfo(createdById);
+      }
+      
+      Map<String, dynamic> meetingWithDetails = {
+        ...meetingResponse,
+        'creator': creator,
+      };
+          
+      return meetingWithDetails;
+    } catch (e) {
+      debugPrint('Error getting meeting details: $e');
+      return null;
+    }
+  }
+  
+  // Update a meeting
+  Future<Map<String, dynamic>> updateMeeting({
+    required String meetingId,
+    required String title,
+    String? description,
+    required DateTime meetingDate,
+    String? meetingUrl,
+    String? transcription,
+    String? ai_summary,
+  }) async {
+    try {
+      if (!_isInitialized) {
+        return {
+          'success': false,
+          'error': 'Supabase is not initialized',
+        };
+      }
+      
+      final user = _client.auth.currentUser;
+      if (user == null) {
+        return {
+          'success': false,
+          'error': 'User not authenticated',
+        };
+      }
+      
+      // Update the meeting
+      final Map<String, dynamic> meetingData = {
+        'title': title,
+        'description': description,
+        'meeting_date': meetingDate.toIso8601String(),
+        'meeting_url': meetingUrl,
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+      
+      // Add optional fields if provided
+      if (transcription != null) {
+        meetingData['transcription'] = transcription;
+      }
+      
+      if (ai_summary != null) {
+        meetingData['ai_summary'] = ai_summary;
+      }
+      
+      await _client
+          .from('meetings')
+          .update(meetingData)
+          .eq('id', meetingId);
+          
+      // Refresh meetings
+      await getMeetings();
+      
+      return {
+        'success': true,
+      };
+    } catch (e) {
+      debugPrint('Error updating meeting: $e');
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
+    }
+  }
+  
+  // Delete a meeting
+  Future<Map<String, dynamic>> deleteMeeting(String meetingId) async {
+    try {
+      if (!_isInitialized) {
+        return {
+          'success': false,
+          'error': 'Supabase is not initialized',
+        };
+      }
+      
+      final user = _client.auth.currentUser;
+      if (user == null) {
+        return {
+          'success': false,
+          'error': 'User not authenticated',
+        };
+      }
+      
+      // Delete the meeting
+      await _client
+          .from('meetings')
+          .delete()
+          .eq('id', meetingId);
+          
+      // Refresh meetings
+      await getMeetings();
+      
+      return {
+        'success': true,
+      };
+    } catch (e) {
+      debugPrint('Error deleting meeting: $e');
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
+    }
+  }
+  
   // Clean up resources
   void dispose() {
     _tasksStreamController.close();
     _ticketsStreamController.close();
+    _meetingsStreamController.close();
   }
 } 
