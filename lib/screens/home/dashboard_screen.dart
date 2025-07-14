@@ -14,6 +14,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   int _selectedTimeRange = 1; // 0: Week, 1: Month, 2: Year
+  bool _isLoading = true;
 
   @override
   void initState() {
@@ -22,6 +23,15 @@ class _DashboardScreenState extends State<DashboardScreen>
       duration: const Duration(seconds: 20),
       vsync: this,
     )..repeat();
+    
+    // Simulate loading delay
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    });
   }
 
   @override
@@ -32,6 +42,12 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        backgroundColor: Color(0xFF1A1A1A),
+        body: DashboardLoadingSkeleton(),
+      );
+    }
     return Scaffold(
       backgroundColor: const Color(0xFF1A1A1A),
       body: CustomScrollView(

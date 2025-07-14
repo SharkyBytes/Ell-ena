@@ -7,6 +7,7 @@ import '../meetings/meeting_screen.dart';
 import '../meetings/create_meeting_screen.dart';
 import '../chat/chat_screen.dart';
 import '../../services/supabase_service.dart';
+import '../../widgets/custom_widgets.dart';
 
 class WorkspaceScreen extends StatefulWidget {
   const WorkspaceScreen({super.key});
@@ -21,12 +22,22 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
   DateTime? _selectedDate;
   TimeOfDay? _selectedTime;
   String? _selectedPriority;
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
     _tabController.addListener(_handleTabChange);
+    
+    // Simulate loading delay
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    });
   }
 
   @override
@@ -139,6 +150,13 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        backgroundColor: Color(0xFF1A1A1A),
+        body: WorkspaceLoadingSkeleton(),
+      );
+    }
+    
     return Scaffold(
       backgroundColor: const Color(0xFF1A1A1A),
       body: Column(

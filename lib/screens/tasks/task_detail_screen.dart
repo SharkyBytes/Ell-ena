@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../services/supabase_service.dart';
+import '../../widgets/custom_widgets.dart';
 
 class TaskDetailScreen extends StatefulWidget {
   final String taskId;
@@ -71,25 +72,32 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       }
     }
   }
-  
+
   Future<void> _updateTaskStatus(String status) async {
     try {
-      await _supabaseService.updateTaskStatus(
+      final success = await _supabaseService.updateTaskStatus(
         taskId: widget.taskId,
         status: status,
       );
-      
-      // Reload task details
-      _loadTaskDetails();
-      
-      // Show success message
+
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Task status updated to ${_getStatusLabel(status)}'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        if (success == true) {
+          // Reload task details
+          await _loadTaskDetails();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Task status updated to ${_getStatusLabel(status)}'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Failed to update task status'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     } catch (e) {
       debugPrint('Error updating task status: $e');
@@ -103,7 +111,6 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       }
     }
   }
-  
   Future<void> _updateTaskApproval(String approvalStatus) async {
     try {
       await _supabaseService.updateTaskApproval(
@@ -216,7 +223,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
           title: const Text('Task Details'),
           backgroundColor: Colors.green.shade800,
         ),
-        body: const Center(child: CircularProgressIndicator()),
+        body: const Center(child: CustomLoading()),
       );
     }
     

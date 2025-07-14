@@ -3,6 +3,7 @@ import '../../services/supabase_service.dart';
 import '../../services/navigation_service.dart';
 import '../auth/login_screen.dart';
 import 'team_members_screen.dart';
+import 'edit_profile_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -444,6 +445,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 title: 'Edit Profile',
                 subtitle: 'Update your personal information',
                 iconColor: Colors.blue.shade400,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => EditProfileScreen(
+                        userProfile: _userProfile!,
+                        onProfileUpdated: () {
+                          _loadUserProfile();
+                        },
+                      ),
+                    ),
+                  );
+                },
               ),
               const Divider(color: Colors.grey),
               _buildSettingItem(

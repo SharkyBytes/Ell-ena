@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../services/supabase_service.dart';
+import '../../widgets/custom_widgets.dart';
 
 class TicketDetailScreen extends StatefulWidget {
   final String ticketId;
@@ -365,7 +366,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
           backgroundColor: const Color(0xFF2D2D2D),
           title: const Text('Ticket Details'),
         ),
-        body: const Center(child: CircularProgressIndicator()),
+        body: const Center(child: CustomLoading()),
       );
     }
     
