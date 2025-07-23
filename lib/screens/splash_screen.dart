@@ -38,7 +38,6 @@ class _SplashScreenState extends State<SplashScreen>
 
     _animationController.forward();
 
-    // Check for existing session after animation completes
     Timer(const Duration(seconds: 3), () {
       _checkSession();
     });
@@ -46,23 +45,18 @@ class _SplashScreenState extends State<SplashScreen>
   
   Future<void> _checkSession() async {
     try {
-      // Check if user is already logged in
       final currentUser = _supabaseService.client.auth.currentUser;
       
-      // Get any arguments from the route
       final args = ModalRoute.of(context)?.settings.arguments;
       
       if (currentUser != null) {
-        // User is logged in, go directly to home screen
         if (args != null && args is Map<String, dynamic>) {
-          // Pass arguments to home screen using regular navigation
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(
               builder: (context) => HomeScreen(arguments: args),
             ),
           );
         } else {
-          // No arguments, use regular navigation
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(
               builder: (context) => const HomeScreen(),
@@ -70,7 +64,6 @@ class _SplashScreenState extends State<SplashScreen>
           );
         }
       } else {
-        // No active session, go to login screen
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
             builder: (context) => const LoginScreen(),
@@ -79,7 +72,6 @@ class _SplashScreenState extends State<SplashScreen>
       }
     } catch (e) {
       debugPrint('Error checking session: $e');
-      // If there's an error, default to onboarding
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
           builder: (context) => const OnboardingScreen(),

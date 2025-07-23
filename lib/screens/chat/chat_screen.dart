@@ -62,28 +62,23 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   
   Future<void> _initializeServices() async {
     try {
-      // Initialize AI service
       if (!_aiService.isInitialized) {
         await _aiService.initialize();
       }
       
-      // Initialize Supabase service if needed
       if (!_supabaseService.isInitialized) {
         await _supabaseService.initialize();
       }
       
-      // Load team members for task assignment
       if (_supabaseService.isInitialized) {
         final userProfile = await _supabaseService.getCurrentUserProfile();
         if (userProfile != null && userProfile['team_id'] != null) {
           await _loadTeamMembers(userProfile['team_id']);
           
-          // Load user's tasks and tickets
           await _loadUserTasksAndTickets();
         }
       }
       
-      // Add welcome message
       setState(() {
         _messages.add(
           ChatMessage(
@@ -111,13 +106,10 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     }
   }
   
-  // Load user's tasks and tickets
   Future<void> _loadUserTasksAndTickets() async {
     try {
-      // Get user's tasks
       final tasks = await _supabaseService.getTasks(filterByAssignment: true);
       
-      // Get user's tickets
       final tickets = await _supabaseService.getTickets(filterByAssignment: true);
       
       if (mounted) {
@@ -156,10 +148,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     _scrollToBottom();
     
     try {
-      // Convert chat history to format expected by AI service
       final chatHistory = _getChatHistoryForAI();
       
-      // Get response from AI service
       final response = await _aiService.generateChatResponse(
         userMessage, 
         chatHistory,
@@ -169,14 +159,12 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       );
       
       if (response['type'] == 'function_call') {
-        // Handle function call
         await _handleFunctionCall(
           response['function_name'], 
           response['arguments'],
           response['raw_response'],
         );
       } else {
-        // Add assistant message
         setState(() {
           _messages.add(
             ChatMessage(
@@ -205,9 +193,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     _scrollToBottom();
   }
   
-  // Convert chat history to format expected by AI service
   List<Map<String, String>> _getChatHistoryForAI() {
-    // Limit to last 10 messages to avoid token limits
     final recentMessages = _messages.length > 10 
         ? _messages.sublist(_messages.length - 10) 
         : _messages;
@@ -220,7 +206,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     }).toList();
   }
   
-  // Handle function calls from the AI
   Future<void> _handleFunctionCall(
     String functionName, 
     Map<String, dynamic> arguments,
@@ -470,7 +455,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       return {'success': false, 'error': e.toString()};
     }
   }
-  
   // Query tasks based on filters
   Future<Map<String, dynamic>> _queryTasks(Map<String, dynamic> arguments) async {
     try {
@@ -837,7 +821,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           return {'success': false, 'error': 'Invalid item type'};
       }
       
-      // Refresh tasks and tickets if needed
       if (result['success'] == true) {
         _loadUserTasksAndTickets();
       }
@@ -849,7 +832,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     }
   }
   
-  // Get card type based on function name
   String _getCardType(String functionName) {
     switch (functionName) {
       case 'create_task':

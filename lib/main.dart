@@ -11,15 +11,11 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
   try {
-    // Initialize Supabase
     await SupabaseService().initialize();
     
-    // Initialize AI Service
     await AIService().initialize();
   } catch (e) {
     debugPrint('Error initializing services: $e');
-    // Continue with the app even if initialization fails
-    // The app will show appropriate error messages when trying to use these features
   }
   
   runApp(const MyApp());
@@ -28,7 +24,6 @@ void main() async {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
