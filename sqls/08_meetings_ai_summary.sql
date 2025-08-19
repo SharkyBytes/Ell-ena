@@ -4,7 +4,7 @@ ADD COLUMN meeting_summary_json JSONB;
 CREATE OR REPLACE FUNCTION trigger_summary_generation()
 RETURNS TRIGGER AS $$
 DECLARE
-    function_url TEXT := 'https://vcyzvymahcfmfjfzaebm.supabase.co/functions/v1/summarise-meeting';
+    function_url TEXT := 'https://project--ref.supabase.co/functions/v1/summarise-meeting';
 BEGIN
     -- Call your Edge Function when final_transcription is updated
     IF NEW.final_transcription IS NOT NULL AND (TG_OP = 'INSERT' OR OLD.final_transcription IS DISTINCT FROM NEW.final_transcription) THEN
@@ -13,7 +13,7 @@ BEGIN
             body := jsonb_build_object('meeting_id', NEW.id),
             headers := '{
                 "Content-Type": "application/json",
-                "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZjeXp2eW1haGNmbWZqZnphZWJtIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0OTc2MTk2NywiZXhwIjoyMDY1MzM3OTY3fQ.Rru5vRGbPeNggwykN-JqgKqqgDY6UwLn67l0rhkW8hI"
+                "Authorization": "Bearer YOUR-SERVICE-ROLE-KEY"
             }'::jsonb
         );
     END IF;

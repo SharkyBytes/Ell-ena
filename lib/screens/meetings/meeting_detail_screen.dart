@@ -262,6 +262,74 @@ class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
       }
     }
   }
+
+  Future<void> _createTicketFromAction(Map<String, dynamic> action) async {
+    try {
+      final title = (action['item']?.toString() ?? 'Action Item');
+      final description = 'Created from meeting action item. Owner: ${action['owner'] ?? 'N/A'} • Deadline: ${action['deadline'] ?? 'N/A'}';
+      const category = 'Meeting Discussion';
+      const priority = 'medium';
+      final result = await _supabaseService.createTicket(
+        title: title,
+        description: description,
+        priority: priority,
+        category: category,
+      );
+      if (!mounted) return;
+      if (result['success'] == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Ticket created'), backgroundColor: Colors.green),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to create ticket: ${result['error']}'), backgroundColor: Colors.red),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  DateTime? _parseDeadline(dynamic value) {
+    if (value == null) return null;
+    final str = value.toString().trim();
+    if (str.isEmpty || str.toLowerCase() == 'n/a') return null;
+    try {
+      return DateTime.parse(str);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _createTaskFromFollowUp(Map<String, dynamic> followUp) async {
+    try {
+      final title = (followUp['task']?.toString() ?? 'Follow-up Task');
+      final due = _parseDeadline(followUp['deadline']);
+      final result = await _supabaseService.createTask(
+        title: title,
+        description: 'Created from meeting follow-up task',
+        dueDate: due,
+      );
+      if (!mounted) return;
+      if (result['success'] == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Task created'), backgroundColor: Colors.green),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to create task: ${result['error']}'), backgroundColor: Colors.red),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
   
   Future<void> _copyMeetingUrl() async {
     if (_meeting == null || _meeting!['meeting_url'] == null) return;
@@ -690,103 +758,8 @@ class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
         
         const SizedBox(height: 16),
         
-        // Transcription
-        if (_meeting!['transcription'] != null && _meeting!['transcription'].toString().isNotEmpty)
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: const Color(0xFF2D2D2D),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      Icons.record_voice_over,
-                      color: Colors.green.shade400,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Meeting Transcription',
-                      style: TextStyle(
-                        color: Colors.grey.shade400,
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1A1A1A),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    _meeting!['transcription'],
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        
-        const SizedBox(height: 16),
-        
-        // AI Summary
-        if (_meeting!['ai_summary'] != null && _meeting!['ai_summary'].toString().isNotEmpty)
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: const Color(0xFF2D2D2D),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      Icons.auto_awesome,
-                      color: Colors.amber.shade400,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'AI Summary',
-                      style: TextStyle(
-                        color: Colors.grey.shade400,
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1A1A1A),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    _meeting!['ai_summary'],
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+        // Manage from AI summary (action items and follow-ups). Hide raw transcription/summary here.
+        if (!isUpcoming) _buildManageSections(),
         
         const SizedBox(height: 24),
         
@@ -972,6 +945,121 @@ class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
               'Save Changes',
               style: TextStyle(color: Colors.white, fontSize: 16),
             ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildManageSections() {
+    final summary = _meeting?['meeting_summary_json'];
+    if (summary == null || summary is! Map || summary.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(color: const Color(0xFF2D2D2D), borderRadius: BorderRadius.circular(16)),
+        child: Text('AI summary not available yet.', style: TextStyle(color: Colors.grey.shade400)),
+      );
+    }
+
+    final actionItems = (summary['action_items'] as List?) ?? [];
+    final followUps = (summary['follow_up_tasks'] as List?) ?? [];
+
+    Widget pill({required Color color, required String title, required String subtitle, required VoidCallback onTap}) {
+      return InkWell(
+        onTap: onTap,
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.12),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: color.withOpacity(0.6)),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.arrow_forward, color: color, size: 16),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 2),
+                    Text(subtitle, style: TextStyle(color: Colors.grey.shade400, fontSize: 12)),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right, color: Colors.white54),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(color: const Color(0xFF2D2D2D), borderRadius: BorderRadius.circular(16)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.topic, color: Colors.amber.shade400, size: 18),
+                  const SizedBox(width: 8),
+                  const Text('Manage Important Discussion', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              const SizedBox(height: 12),
+              if (actionItems.isEmpty)
+                Text('No action items detected', style: TextStyle(color: Colors.grey.shade400))
+              else
+                ...actionItems.map<Widget>((it) {
+                  final map = Map<String, dynamic>.from(it as Map);
+                  final title = map['item']?.toString() ?? 'Action Item';
+                  final subtitle = 'Owner: ${map['owner'] ?? '—'}   •   Deadline: ${map['deadline'] ?? 'N/A'}';
+                  return pill(
+                    color: Colors.amber.shade400,
+                    title: title,
+                    subtitle: subtitle,
+                    onTap: () => _createTicketFromAction(map),
+                  );
+                }).toList(),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(color: const Color(0xFF2D2D2D), borderRadius: BorderRadius.circular(16)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.task_alt, color: Colors.green.shade400, size: 18),
+                  const SizedBox(width: 8),
+                  const Text('Manage Tasks', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              const SizedBox(height: 12),
+              if (followUps.isEmpty)
+                Text('No follow-up tasks detected', style: TextStyle(color: Colors.grey.shade400))
+              else
+                ...followUps.map<Widget>((it) {
+                  final map = Map<String, dynamic>.from(it as Map);
+                  final title = map['task']?.toString() ?? 'Follow-up Task';
+                  final subtitle = 'Deadline: ${map['deadline'] ?? 'N/A'}';
+                  return pill(
+                    color: Colors.green.shade400,
+                    title: title,
+                    subtitle: subtitle,
+                    onTap: () => _createTaskFromFollowUp(map),
+                  );
+                }).toList(),
+            ],
           ),
         ),
       ],
