@@ -30,6 +30,7 @@ class MyApp extends StatelessWidget {
       title: 'Ell-ena',
       debugShowCheckedModeBanner: false,
       navigatorKey: NavigationService().navigatorKey,
+      navigatorObservers: <NavigatorObserver>[AppRouteObserver.instance],
       theme: ThemeData(
         useMaterial3: true,
         brightness: Brightness.dark,
@@ -74,4 +75,10 @@ class MyApp extends StatelessWidget {
       },
     );
   }
+}
+
+// Simple singleton RouteObserver to allow screens to refresh on focus
+class AppRouteObserver extends RouteObserver<ModalRoute<void>> {
+  AppRouteObserver._();
+  static final AppRouteObserver instance = AppRouteObserver._();
 }

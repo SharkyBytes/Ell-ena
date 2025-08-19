@@ -20,6 +20,9 @@ class _DashboardScreenState extends State<DashboardScreen>
   int _selectedTimeRange = 1; // 0: Week, 1: Month, 2: Year
   bool _isLoading = true;
   String? _userName;
+  String? _currentTeamId;
+  String? _currentTeamName;
+  List<Map<String, dynamic>> _userTeams = [];
   int _tasksTotal = 0;
   int _tasksInProgress = 0;
   int _tasksCompleted = 0;
@@ -51,6 +54,121 @@ class _DashboardScreenState extends State<DashboardScreen>
   Future<void> _onRefresh() async {
     await _loadData();
   }
+  
+  void _showTeamSwitcher() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF2D2D2D),
+          title: const Text(
+            'Switch Team',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: _userTeams.length,
+              itemBuilder: (context, index) {
+                final team = _userTeams[index];
+                final isCurrentTeam = team['id'] == _currentTeamId;
+                
+                return ListTile(
+                  title: Text(
+                    team['name'] ?? 'Team',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: isCurrentTeam ? FontWeight.bold : FontWeight.normal,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'Team Code: ${team['team_code'] ?? 'N/A'}',
+                    style: TextStyle(
+                      color: Colors.grey.shade400,
+                      fontSize: 12,
+                    ),
+                  ),
+                  leading: CircleAvatar(
+                    backgroundColor: isCurrentTeam 
+                        ? Colors.green.shade400 
+                        : Colors.grey.shade700,
+                    child: Text(
+                      (team['name'] as String? ?? 'T')[0].toUpperCase(),
+                      style: const TextStyle(color: Colors.white),
+                    ),
+                  ),
+                  trailing: isCurrentTeam 
+                      ? Icon(Icons.check, color: Colors.green.shade400)
+                      : null,
+                  onTap: () {
+                    if (!isCurrentTeam) {
+                      _switchTeam(team['id']);
+                    }
+                    Navigator.pop(context);
+                  },
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+              },
+              child: Text(
+                'Cancel',
+                style: TextStyle(color: Colors.grey.shade400),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+  
+  Future<void> _switchTeam(String teamId) async {
+    try {
+      setState(() {
+        _isLoading = true;
+      });
+      
+      final supa = SupabaseService();
+      final result = await supa.switchTeam(teamId);
+      
+      if (result['success'] == true) {
+        // Reload data with new team
+        await _loadData();
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error switching team: ${result['error']}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Error switching team: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error switching team: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
 
   Future<void> _loadData() async {
     try {
@@ -60,24 +178,45 @@ class _DashboardScreenState extends State<DashboardScreen>
 
       final supa = SupabaseService();
 
-      final profileFuture = supa.getCurrentUserProfile(forceRefresh: true);
+      // Get user profile with team information
+      final profile = await supa.getCurrentUserProfile(forceRefresh: true);
+      
+      // Set username
+      _userName = (profile?['full_name'] as String?)?.trim();
+      
+      // Set current team
+      if (profile != null && profile['team_id'] != null) {
+        _currentTeamId = profile['team_id'];
+        _currentTeamName = profile['teams']?['name'] ?? 'My Team';
+      }
+      
+      // Fetch all teams associated with the user's email
+      final userEmail = profile?['email'] as String?;
+      if (userEmail != null) {
+        try {
+          final teamsResponse = await supa.getUserTeams(userEmail);
+          if (teamsResponse['success'] == true && teamsResponse['teams'] != null) {
+            _userTeams = List<Map<String, dynamic>>.from(teamsResponse['teams']);
+          }
+        } catch (e) {
+          debugPrint('Error fetching user teams: $e');
+        }
+      }
+
+      // Load other data
       final tasksFuture = supa.getTasks();
       final ticketsFuture = supa.getTickets();
       final meetingsFuture = supa.getMeetings();
 
       final results = await Future.wait([
-        profileFuture,
         tasksFuture,
         ticketsFuture,
         meetingsFuture,
       ]);
 
-      final profile = results[0] as Map<String, dynamic>?;
-      final tasks = List<Map<String, dynamic>>.from(results[1] as List);
-      final tickets = List<Map<String, dynamic>>.from(results[2] as List);
-      final meetings = List<Map<String, dynamic>>.from(results[3] as List);
-
-      _userName = (profile?['full_name'] as String?)?.trim();
+      final tasks = List<Map<String, dynamic>>.from(results[0] as List);
+      final tickets = List<Map<String, dynamic>>.from(results[1] as List);
+      final meetings = List<Map<String, dynamic>>.from(results[2] as List);
 
       _tasksTotal = tasks.length;
       _tasksInProgress = tasks.where((t) => t['status'] == 'in_progress').length;
@@ -294,12 +433,15 @@ class _DashboardScreenState extends State<DashboardScreen>
                                     const SizedBox(height: 4),
                                     Row(
                                       children: [
-                                        Text(
-                                          _userName ?? '—',
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 24,
-                                            fontWeight: FontWeight.bold,
+                                        Flexible(
+                                          child: Text(
+                                            _userName ?? '—',
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 24,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
                                           ),
                                         ),
                                         const SizedBox(width: 8),
@@ -339,6 +481,31 @@ class _DashboardScreenState extends State<DashboardScreen>
                                         ),
                                       ],
                                     ),
+                                    if (_userTeams.length > 1)
+                                      GestureDetector(
+                                        onTap: _showTeamSwitcher,
+                                        child: Padding(
+                                          padding: const EdgeInsets.only(top: 4),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Text(
+                                                _currentTeamName ?? 'My Team',
+                                                style: TextStyle(
+                                                  color: Colors.white.withOpacity(0.9),
+                                                  fontSize: 14,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Icon(
+                                                Icons.swap_horiz,
+                                                color: Colors.white.withOpacity(0.9),
+                                                size: 16,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
                                   ],
                                 ),
                               ),
@@ -533,8 +700,8 @@ class _DashboardScreenState extends State<DashboardScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
                 'Task Completion by Day',
@@ -544,12 +711,14 @@ class _DashboardScreenState extends State<DashboardScreen>
                   fontWeight: FontWeight.bold,
                 ),
               ),
+              const SizedBox(height: 10),
               Container(
                 decoration: BoxDecoration(
                   color: Colors.grey.shade800,
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     _timeRangeButton('Week', 0),
                     _timeRangeButton('Month', 1),
