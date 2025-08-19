@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../services/supabase_service.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:pdf/pdf.dart';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
+import 'package:flutter/foundation.dart';
 
 class MeetingInsightsScreen extends StatefulWidget {
   final String meetingId;
@@ -58,6 +63,13 @@ class _MeetingInsightsScreenState extends State<MeetingInsightsScreen> with Sing
             Tab(text: 'AI Summary'),
           ],
         ),
+        actions: [
+          IconButton(
+            tooltip: 'Download PDF',
+            icon: const Icon(Icons.download),
+            onPressed: _downloadCurrentTabAsPdf,
+          )
+        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -69,6 +81,163 @@ class _MeetingInsightsScreenState extends State<MeetingInsightsScreen> with Sing
               ],
             ),
     );
+  }
+
+  Future<void> _downloadCurrentTabAsPdf() async {
+    try {
+      final idx = _tabController.index;
+      final isTranscript = idx == 0;
+      final doc = pw.Document();
+
+      final title = isTranscript ? 'Meeting Transcription' : 'AI Summary';
+      final meetingTitle = (_meeting?['title']?.toString() ?? 'Meeting');
+      final meetingDate = _meeting?['meeting_date']?.toString() ?? '';
+
+      if (isTranscript) {
+        final segments = _meeting?['final_transcription'] as List?;
+        doc.addPage(
+          pw.MultiPage(
+            pageFormat: PdfPageFormat.a4,
+            build: (ctx) {
+              return [
+                pw.Header(
+                  level: 0,
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(title, style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold)),
+                      pw.SizedBox(height: 4),
+                      pw.Text(meetingTitle, style: const pw.TextStyle(fontSize: 14)),
+                      if (meetingDate.isNotEmpty) pw.Text(meetingDate, style: const pw.TextStyle(fontSize: 12)),
+                    ],
+                  ),
+                ),
+                if (segments != null && segments.isNotEmpty)
+                  ...segments.map<pw.Widget>((s) {
+                    final seg = Map<String, dynamic>.from(s as Map);
+                    final speaker = seg['speaker']?.toString() ?? 'Speaker';
+                    final text = seg['text']?.toString() ?? '';
+                    return pw.Padding(
+                      padding: const pw.EdgeInsets.symmetric(vertical: 4),
+                      child: pw.RichText(
+                        text: pw.TextSpan(
+                          children: [
+                            pw.TextSpan(text: '$speaker: ', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                            pw.TextSpan(text: text),
+                          ],
+                        ),
+                      ),
+                    );
+                  }).toList()
+                else
+                  pw.Text('No transcription available'),
+              ];
+            },
+          ),
+        );
+      } else {
+        final summary = _meeting?['meeting_summary_json'] as Map?;
+        doc.addPage(
+          pw.MultiPage(
+            pageFormat: PdfPageFormat.a4,
+            build: (ctx) {
+              List<pw.Widget> bullets(dynamic list) {
+                final l = (list as List?) ?? [];
+                return l.map<pw.Widget>((e) => pw.Bullet(text: e.toString())).toList();
+              }
+              pw.Widget actionItems(dynamic list) {
+                final items = (list as List?) ?? [];
+                return pw.Column(
+                  children: items.map<pw.Widget>((it) {
+                    final map = Map<String, dynamic>.from(it as Map);
+                    return pw.Container(
+                      padding: const pw.EdgeInsets.all(8),
+                      margin: const pw.EdgeInsets.only(bottom: 6),
+                      decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.grey300), borderRadius: pw.BorderRadius.circular(4)),
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text(map['item']?.toString() ?? '', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                          pw.SizedBox(height: 2),
+                          pw.Text('Owner: ${map['owner'] ?? '—'}   •   Deadline: ${map['deadline'] ?? 'N/A'}', style: const pw.TextStyle(fontSize: 10)),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                );
+              }
+
+              return [
+                pw.Header(
+                  level: 0,
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(title, style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold)),
+                      pw.SizedBox(height: 4),
+                      pw.Text(meetingTitle, style: const pw.TextStyle(fontSize: 14)),
+                      if (meetingDate.isNotEmpty) pw.Text(meetingDate, style: const pw.TextStyle(fontSize: 12)),
+                    ],
+                  ),
+                ),
+                if (summary == null || summary.isEmpty) pw.Text('No AI summary available') else ...[
+                  pw.Text('Key Discussion Points', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                  ...bullets(summary['key_discussion_points']),
+                  pw.SizedBox(height: 8),
+                  pw.Text('Important Decisions', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                  ...bullets(summary['important_decisions']),
+                  pw.SizedBox(height: 8),
+                  pw.Text('Action Items', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                  actionItems(summary['action_items']),
+                  pw.SizedBox(height: 8),
+                  pw.Text('Meeting Highlights', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                  ...bullets(summary['meeting_highlights']),
+                  pw.SizedBox(height: 8),
+                  pw.Text('Follow-up Tasks', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                  actionItems((summary['follow_up_tasks'] as List?)?.map((e) => {'item': e['task'], 'owner': '', 'deadline': e['deadline']}).toList()),
+                  pw.SizedBox(height: 8),
+                  pw.Text('Overall Summary', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                  pw.Text(summary['overall_summary']?.toString() ?? ''),
+                ],
+              ];
+            },
+          ),
+        );
+      }
+
+      final bytes = await doc.save();
+      String filename = '${title.replaceAll(' ', '_')}_${DateTime.now().millisecondsSinceEpoch}.pdf';
+
+      if (Platform.isAndroid) {
+        // Try Downloads directory; if it fails, fall back to temp.
+        try {
+          final dir = Directory('/storage/emulated/0/Download');
+          if (await dir.exists()) {
+            final file = File('${dir.path}/$filename');
+            await file.writeAsBytes(bytes);
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Saved to ${file.path}'), backgroundColor: Colors.green),
+            );
+            return;
+          }
+        } catch (_) {}
+      }
+
+      // Fallback to app temp if permission not granted or other platforms
+      final tempDir = await getTemporaryDirectory();
+      final fallbackFile = File('${tempDir.path}/$filename');
+      await fallbackFile.writeAsBytes(bytes);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Saved to ${fallbackFile.path}'), backgroundColor: Colors.green),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('PDF error: $e'), backgroundColor: Colors.red),
+      );
+    }
   }
 
   Widget _buildTranscriptView() {
