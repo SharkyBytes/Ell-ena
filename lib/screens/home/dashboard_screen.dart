@@ -224,7 +224,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           SliverAppBar(
             backgroundColor: Colors.transparent,
             elevation: 0,
-            expandedHeight: 150,
+            expandedHeight: 160,
             pinned: true,
             flexibleSpace: FlexibleSpaceBar(
               background: Stack(
@@ -249,16 +249,17 @@ class _DashboardScreenState extends State<DashboardScreen>
                     painter: DotPatternPainter(
                       color: Colors.white.withOpacity(0.1),
                     ),
-                    size: Size(MediaQuery.of(context).size.width, 150),
+                    size: Size(MediaQuery.of(context).size.width, 160),
                   ),
                   SafeArea(
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
+                      padding: const EdgeInsets.fromLTRB(24, 16, 24, 20),
                       child: Column(
-                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.center,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
                               Container(
                                 width: 48,
@@ -536,7 +537,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text(
-                'Task Completion (Last 7 days)',
+                'Task Completion by Day',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 18,
@@ -568,9 +569,19 @@ class _DashboardScreenState extends State<DashboardScreen>
                       style: TextStyle(color: Colors.grey.shade500),
                     ),
                   )
-                : LineChart(
-                    LineChartData(
-                      gridData: FlGridData(show: false),
+                : BarChart(
+                    BarChartData(
+                      gridData: FlGridData(
+                        show: true,
+                        drawVerticalLine: false,
+                        horizontalInterval: 1,
+                        getDrawingHorizontalLine: (value) {
+                          return FlLine(
+                            color: Colors.grey.shade800,
+                            strokeWidth: 1,
+                          );
+                        },
+                      ),
                       titlesData: FlTitlesData(
                         leftTitles: AxisTitles(
                           sideTitles: SideTitles(
@@ -614,19 +625,24 @@ class _DashboardScreenState extends State<DashboardScreen>
                         ),
                       ),
                       borderData: FlBorderData(show: false),
-                      lineBarsData: [
-                        LineChartBarData(
-                          spots: _taskCompletionSpots,
-                          isCurved: true,
-                          color: Colors.green.shade400,
-                          barWidth: 3,
-                          dotData: FlDotData(show: false),
-                          belowBarData: BarAreaData(
-                            show: true,
-                            color: Colors.green.shade400.withOpacity(0.1),
-                          ),
-                        ),
-                      ],
+                      barGroups: _taskCompletionSpots.map((spot) {
+                        return BarChartGroupData(
+                          x: spot.x.toInt(),
+                          barRods: [
+                            BarChartRodData(
+                              toY: spot.y,
+                              color: Colors.green.shade400,
+                              width: 16,
+                              borderRadius: BorderRadius.circular(4),
+                              backDrawRodData: BackgroundBarChartRodData(
+                                show: true,
+                                toY: 5, // Maximum expected value or slightly higher
+                                color: Colors.green.shade400.withOpacity(0.1),
+                              ),
+                            ),
+                          ],
+                        );
+                      }).toList(),
                     ),
                   ),
           ),
