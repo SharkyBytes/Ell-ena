@@ -4,6 +4,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:ell_ena/services/supabase_service.dart';
+import 'package:ell_ena/services/meeting_formatter.dart';
 
 class AIService {
   static final AIService _instance = AIService._internal();
@@ -71,43 +72,8 @@ class AIService {
       final meetingSummaries = await getRelevantMeetingSummaries(userMessage);
       
       if (meetingSummaries.isNotEmpty) {
-        meetingContext = "\nRelevant meeting information:\n";
-        
-        for (var meeting in meetingSummaries) {
-          final meetingDate = meeting['meeting_date'] != null 
-              ? DateFormat('yyyy-MM-dd HH:mm').format(DateTime.parse(meeting['meeting_date'].toString()))
-              : "Unknown date";
-              
-          meetingContext += "Meeting: ${meeting['title']} (${meetingDate})\n";
-          
-          final summary = meeting['summary'];
-          if (summary != null) {
-            if (summary is Map) {
-              // Extract key points from summary
-              if (summary['key_discussion_points'] != null) {
-                meetingContext += "Key Points:\n";
-                for (var point in summary['key_discussion_points']) {
-                  meetingContext += "- $point\n";
-                }
-              }
-              
-              // Add decisions if available
-              if (summary['important_decisions'] != null) {
-                meetingContext += "Decisions:\n";
-                for (var decision in summary['important_decisions']) {
-                  meetingContext += "- $decision\n";
-                }
-              }
-              if (summary['overall_summary'] != null) {
-                meetingContext += "Summary: ${summary['overall_summary']}\n";
-              }
-            } else {
-              meetingContext += summary.toString();
-            }
-          }
-          
-          meetingContext += "\n";
-        }
+        meetingContext = "\nRelevant meeting information:\n\n";
+        meetingContext += MeetingFormatter.formatMeetingSummaries(meetingSummaries);
       }
     }
     
@@ -602,7 +568,7 @@ Future<List<Map<String, dynamic>>> getRelevantMeetingSummaries(String query) asy
       'search_meeting_summaries_by_resp_id',
       params: {
         'resp_id': respId,
-        'match_count': 5,
+        'match_count': 2,
       },
     );
 
