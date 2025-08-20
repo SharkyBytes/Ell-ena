@@ -2,20 +2,23 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
+import 'package:ell_ena/services/supabase_service.dart';
 
 class AIService {
   static final AIService _instance = AIService._internal();
   final String _apiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
   String? _apiKey;
   bool _isInitialized = false;
+  late final SupabaseService _supabaseService;
   
   factory AIService() {
     return _instance;
   }
   
-  AIService._internal();
+  AIService._internal() {
+    _supabaseService = SupabaseService();
+  }
   
   bool get isInitialized => _isInitialized;
   
@@ -32,6 +35,11 @@ class AIService {
       
       if (_apiKey == null || _apiKey!.isEmpty) {
         throw Exception('Missing Gemini API key. Please check your .env file.');
+      }
+      
+      // Initialize Supabase service if not already initialized
+      if (!_supabaseService.isInitialized) {
+        await _supabaseService.initialize();
       }
       
       _isInitialized = true;
@@ -52,6 +60,52 @@ class AIService {
   }) async {
     if (!_isInitialized) {
       await initialize();
+    }
+    
+    // Check if the message is asking about meetings
+    bool isMeetingQuery = _isMeetingRelatedQuery(userMessage);
+    String meetingContext = "";
+    
+    // If it's a meeting query, retrieve relevant meeting summaries
+    if (isMeetingQuery) {
+      final meetingSummaries = await getRelevantMeetingSummaries(userMessage);
+      
+      if (meetingSummaries.isNotEmpty) {
+        meetingContext = "\nRelevant meeting information:\n";
+        
+        for (var meeting in meetingSummaries) {
+          final meetingDate = meeting['meeting_date'] != null 
+              ? DateFormat('yyyy-MM-dd HH:mm').format(DateTime.parse(meeting['meeting_date'].toString()))
+              : "Unknown date";
+              
+          meetingContext += "Meeting: ${meeting['title']} (${meetingDate})\n";
+          
+          final summary = meeting['summary'];
+          if (summary != null) {
+            if (summary is Map) {
+              // Extract key points from summary
+              if (summary['key_points'] != null) {
+                meetingContext += "Key points:\n";
+                for (var point in summary['key_points']) {
+                  meetingContext += "- $point\n";
+                }
+              }
+              
+              // Add decisions if available
+              if (summary['decisions'] != null) {
+                meetingContext += "Decisions:\n";
+                for (var decision in summary['decisions']) {
+                  meetingContext += "- $decision\n";
+                }
+              }
+            } else {
+              meetingContext += summary.toString();
+            }
+          }
+          
+          meetingContext += "\n";
+        }
+      }
     }
     
     try {
@@ -288,6 +342,7 @@ class AIService {
                     "$teamMemberContext\n" +
                     "$taskContext" +
                     "$ticketContext\n" +
+                    "$meetingContext\n" +
                     "Guidelines for tasks, tickets, and meetings:\n" +
                     "1. Create descriptive, clear titles that summarize the purpose - be specific and professional (e.g., 'Bug Fixes Discussion' instead of just 'Meeting')\n" +
                     "2. Always provide detailed descriptions with all relevant information, even if the user doesn't explicitly provide it\n" +
@@ -427,9 +482,8 @@ class AIService {
     }
     
     try {
-      // Parse the raw response to extract the model's message
-      final parsedRawResponse = jsonDecode(rawResponse);
-      final modelContent = parsedRawResponse['candidates'][0]['content'];
+      // Parse the raw response for debugging purposes
+      jsonDecode(rawResponse);
       
       // Create the contents array for the follow-up request
       final List<Map<String, dynamic>> contents = [];
@@ -519,4 +573,46 @@ class AIService {
       return 'Function executed successfully.';
     }
   }
-} 
+  
+  // Function to get relevant meeting summaries for a query
+  Future<List<Map<String, dynamic>>> getRelevantMeetingSummaries(String query) async {
+    if (!_isInitialized) {
+      await initialize();
+    }
+    
+    print("👉 getRelevantMeetingSummaries() called with query: $query");
+    
+    try {
+      final response = await _supabaseService.client.rpc(
+        'search_meeting_summaries',
+        params: {
+          'query_text': query,
+          'match_count': 3, // Get top 3 relevant meetings
+        },
+      );
+      
+      if (response.error != null) {
+        throw Exception('Error retrieving meeting summaries: ${response.error!.message}');
+      }
+      
+      return List<Map<String, dynamic>>.from(response.data ?? []);
+    } catch (e) {
+      debugPrint('Error getting relevant meeting summaries: $e');
+      return [];
+    }
+  }
+
+  // Helper method to detect if a query is meeting-related
+  bool _isMeetingRelatedQuery(String query) {
+    final meetingKeywords = [
+      'meeting', 'meetings', 'call', 'discussion', 'talked about', 
+      'said in', 'mentioned in', 'last meeting', 'previous meeting',
+      'summary', 'minutes', 'transcript', 'recording', 'spoke about', 'last meet', 'previous meeting',
+      'last call', 'previous call', 'last discussion', 'previous discussion', 'last talked about', 'previous talked about',
+      'last mentioned in', 'previous mentioned in', 'last spoke about', 'previous spoke about', 'last discussed', 'previous discussed',
+    ];
+    
+    final queryLower = query.toLowerCase();
+    return meetingKeywords.any((keyword) => queryLower.contains(keyword));
+  }
+}
