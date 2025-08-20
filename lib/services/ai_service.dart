@@ -84,19 +84,22 @@ class AIService {
           if (summary != null) {
             if (summary is Map) {
               // Extract key points from summary
-              if (summary['key_points'] != null) {
-                meetingContext += "Key points:\n";
-                for (var point in summary['key_points']) {
+              if (summary['key_discussion_points'] != null) {
+                meetingContext += "Key Points:\n";
+                for (var point in summary['key_discussion_points']) {
                   meetingContext += "- $point\n";
                 }
               }
               
               // Add decisions if available
-              if (summary['decisions'] != null) {
+              if (summary['important_decisions'] != null) {
                 meetingContext += "Decisions:\n";
-                for (var decision in summary['decisions']) {
+                for (var decision in summary['important_decisions']) {
                   meetingContext += "- $decision\n";
                 }
+              }
+              if (summary['overall_summary'] != null) {
+                meetingContext += "Summary: ${summary['overall_summary']}\n";
               }
             } else {
               meetingContext += summary.toString();
@@ -575,32 +578,36 @@ class AIService {
   }
   
   // Function to get relevant meeting summaries for a query
-  Future<List<Map<String, dynamic>>> getRelevantMeetingSummaries(String query) async {
-    if (!_isInitialized) {
-      await initialize();
-    }
-    
-    print("👉 getRelevantMeetingSummaries() called with query: $query");
-    
-    try {
-      final response = await _supabaseService.client.rpc(
-        'search_meeting_summaries',
-        params: {
-          'query_text': query,
-          'match_count': 3, // Get top 3 relevant meetings
-        },
-      );
-      
-      if (response.error != null) {
-        throw Exception('Error retrieving meeting summaries: ${response.error!.message}');
-      }
-      
-      return List<Map<String, dynamic>>.from(response.data ?? []);
-    } catch (e) {
-      debugPrint('Error getting relevant meeting summaries: $e');
+ Future<List<Map<String, dynamic>>> getRelevantMeetingSummaries(String query) async {
+  if (!_isInitialized) {
+    await initialize();
+  }
+
+  print("👉 getRelevantMeetingSummaries() called with query: $query");
+
+  try {
+    final response = await _supabaseService.client.rpc(
+      'search_meeting_summaries',
+      params: {
+        'query_text': query,
+        'match_count': 3,
+      },
+    );
+
+
+    // Ensure response is a list
+    if (response is List) {
+    print("👉 response: $response");
+
+      return List<Map<String, dynamic>>.from(response);
+    } else {
       return [];
     }
+  } catch (e, st) {
+    debugPrint('Error getting relevant meeting summaries: $e\n$st');
+    return [];
   }
+}
 
   // Helper method to detect if a query is meeting-related
   bool _isMeetingRelatedQuery(String query) {
@@ -609,7 +616,13 @@ class AIService {
       'said in', 'mentioned in', 'last meeting', 'previous meeting',
       'summary', 'minutes', 'transcript', 'recording', 'spoke about', 'last meet', 'previous meeting',
       'last call', 'previous call', 'last discussion', 'previous discussion', 'last talked about', 'previous talked about',
-      'last mentioned in', 'previous mentioned in', 'last spoke about', 'previous spoke about', 'last discussed', 'previous discussed',
+      'last mentioned in', 'previous mentioned in', 'last spoke about', 'previous spoke about', 'last discussed', 'previous discussed','meeting', 'meet', 'call', 'discussion', 'talked about', 
+      'said in', 'mentioned in', 'last meeting', 'previous meeting',
+      'summary', 'minutes', 'transcript', 'recording', 'spoke about', 'last meet', 'previous meeting',
+      'last call', 'previous call', 'last discussion', 'previous discussion', 'last talked about', 'previous talked about',
+      'last mentioned in', 'previous mentioned in', 'last spoke about', 'previous spoke about', 'last discussed', 'previous discussed','meeting', 'meet', 'call', 'discussion', 'talked about', 
+      'said in', 'mentioned in', 'last meeting', 'previous meeting',
+      'summary', 'minutes', 'transcript', 'recording', 'spoke about', 'last meet', 'previous meeting',
     ];
     
     final queryLower = query.toLowerCase();
