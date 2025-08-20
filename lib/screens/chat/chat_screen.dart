@@ -152,6 +152,109 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     }
     super.dispose();
   }
+  
+  // Build the listening animation dialog
+  Widget _buildListeningDialog() {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      child: Container(
+        width: 200,
+        height: 200,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: const Color(0xFF2D2D2D),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.3),
+              blurRadius: 10,
+              spreadRadius: 2,
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Sound wave animation
+            Flexible(
+              child: FittedBox(
+                fit: BoxFit.contain,
+                child: AnimatedBuilder(
+                  animation: _waveformController,
+                  builder: (context, child) {
+                    return Container(
+                      height: 100,
+                      width: 100,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.green.withOpacity(0.1),
+                      ),
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          // Outer ripple
+                          Container(
+                            width: 100 * _waveformController.value,
+                            height: 100 * _waveformController.value,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.green.withOpacity(0.2 * (1 - _waveformController.value)),
+                            ),
+                          ),
+                          // Middle ripple
+                          Container(
+                            width: 70 * _waveformController.value,
+                            height: 70 * _waveformController.value,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.green.withOpacity(0.3 * (1 - _waveformController.value)),
+                            ),
+                          ),
+                          // Inner circle with mic icon
+                          Container(
+                            width: 50,
+                            height: 50,
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.green,
+                            ),
+                            child: const Icon(
+                              Icons.mic,
+                              color: Colors.white,
+                              size: 24,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Listening...',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Tap anywhere to cancel',
+              style: TextStyle(
+                color: Colors.grey.shade400,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   void _sendMessage() async {
     if (_messageController.text.trim().isEmpty) return;
@@ -951,6 +1054,16 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       setState(() => _isListening = false);
       return;
     }
+    
+    // Show the listening animation dialog
+    if (mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: true,
+        builder: (context) => _buildListeningDialog(),
+      );
+    }
+    
     setState(() => _isListening = true);
     await _speech.listen(
       onResult: (result) {
@@ -961,6 +1074,9 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       listenMode: stt.ListenMode.dictation,
       partialResults: true,
       cancelOnError: true,
+      onSoundLevelChange: (level) {
+        // You can use this to update animation intensity if needed
+      },
     );
   }
 
