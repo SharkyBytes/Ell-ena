@@ -577,8 +577,8 @@ class AIService {
     }
   }
   
-  // Function to get relevant meeting summaries for a query
- Future<List<Map<String, dynamic>>> getRelevantMeetingSummaries(String query) async {
+// Function to get relevant meeting summaries for a query (vector search only)
+Future<List<Map<String, dynamic>>> getRelevantMeetingSummaries(String query) async {
   if (!_isInitialized) {
     await initialize();
   }
@@ -586,21 +586,44 @@ class AIService {
   print("👉 getRelevantMeetingSummaries() called with query: $query");
 
   try {
-    final response = await _supabaseService.client.rpc(
-      'search_meeting_summaries',
+    // Step 1: Queue the embedding request and get the response ID
+    final respIdResponse = await _supabaseService.client.rpc(
+      'queue_embedding',
       params: {
         'query_text': query,
-        'match_count': 3,
       },
     );
 
+    final respId = respIdResponse as int;
+    print("👉 Embedding queued with response ID: $respId");
 
-    // Ensure response is a list
+    // Step 2: Fetch meetings using the resp_id
+    final response = await _supabaseService.client.rpc(
+      'search_meeting_summaries_by_resp_id',
+      params: {
+        'resp_id': respId,
+        'match_count': 5,
+      },
+    );
+
+    print("👉 Got search results using response ID: $respId");
+
     if (response is List) {
-    print("👉 response: $response");
+      final meetings = List<Map<String, dynamic>>.from(response);
 
-      return List<Map<String, dynamic>>.from(response);
+      for (var meeting in meetings) {
+        print("Meeting: ${meeting['title']} - Date: ${meeting['meeting_date']}");
+        if (meeting.containsKey('similarity')) {
+          print("Similarity: ${meeting['similarity']}");
+        }
+        if (meeting.containsKey('debug_info')) {
+          print("Debug info: ${meeting['debug_info']}");
+        }
+      }
+
+      return meetings;
     } else {
+      print("👉 No relevant meetings found or invalid response format");
       return [];
     }
   } catch (e, st) {
