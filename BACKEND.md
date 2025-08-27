@@ -290,4 +290,4 @@ After setting up your backend:
 
 ---
 
-This guide should help you get started with the Ell-ena backend. For more detailed information about specific features or customizations, please refer to the project documentation or contact the development team.
+This guide should help you get started with the Ell-ena backend. 
