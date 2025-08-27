@@ -4,11 +4,11 @@ DECLARE
     resp_id BIGINT;
 BEGIN
     resp_id := net.http_post(
-       url := 'https://vcyzvymahcfmfjfzaebm.supabase.co/functions/v1/get-embedding',
+       url := 'https://project--ref.supabase.co/functions/v1/get-embedding',
         body := jsonb_build_object('text', query_text),
         headers := '{
             "Content-Type": "application/json",
-            "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZjeXp2eW1haGNmbWZqZnphZWJtIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0OTc2MTk2NywiZXhwIjoyMDY1MzM3OTY3fQ.Rru5vRGbPeNggwykN-JqgKqqgDY6UwLn67l0rhkW8hI"
+            "Authorization": "Bearer SUPABASE_SERVICE_ROLE_KEY"
         }'::jsonb
     );
     RETURN resp_id;

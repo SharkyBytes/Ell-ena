@@ -1061,7 +1061,13 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         context: context,
         barrierDismissible: true,
         builder: (context) => _buildListeningDialog(),
-      );
+        ).then((_) {
+          // Stop listening if dialog was dismissed
+          if (_isListening && _speech.isListening) {
+            _speech.stop();
+            setState(() => _isListening = false);
+          }  
+     } );
     }
     
     setState(() => _isListening = true);
@@ -1304,13 +1310,142 @@ class _ChatBubble extends StatelessWidget {
                 color: message.isUser ? Colors.green : Colors.grey.shade800,
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: Text(message.text, style: const TextStyle(color: Colors.white)),
+              child: _buildFormattedText(message.text),
             ),
           ),
           const SizedBox(width: 8),
           if (message.isUser) _buildAvatar(isUser: true),
         ],
       ),
+    );
+  }
+  
+  // Build formatted text that handles markdown-like formatting
+  Widget _buildFormattedText(String text) {
+    // Check if text contains formatting indicators
+    final containsFormatting = text.contains('*') || 
+                              text.contains('•') || 
+                              text.contains('📅') ||
+                              text.contains('🕒');
+    
+    if (!containsFormatting) {
+      // Simple text without formatting
+      return Text(text, style: const TextStyle(color: Colors.white));
+    }
+    
+    // Split the text by lines to handle each line separately
+    final lines = text.split('\n');
+    final widgets = <Widget>[];
+    
+    for (int i = 0; i < lines.length; i++) {
+      final line = lines[i];
+      
+      // Handle empty lines
+      if (line.isEmpty) {
+        widgets.add(const SizedBox(height: 8));
+        continue;
+      }
+      
+      // Handle headers (lines with asterisks)
+      if (line.startsWith('*') && line.endsWith('*')) {
+        final content = line.substring(1, line.length - 1).trim();
+        widgets.add(
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text(
+              content,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+          ),
+        );
+      }
+      // Handle bullet points
+      else if (line.startsWith('•')) {
+        widgets.add(
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4, left: 8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('•', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    line.substring(1).trim(),
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+      // Handle emoji indicators (like meeting date/time)
+      else if (line.startsWith('📅') || line.startsWith('🕒')) {
+        widgets.add(
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text(
+              line,
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: line.startsWith('📅') ? FontWeight.bold : FontWeight.normal,
+                fontSize: line.startsWith('📅') ? 16 : 14,
+              ),
+            ),
+          ),
+        );
+      }
+      // Handle section headers (lines with asterisks like *Key Points:*)
+      else if (line.contains('*')) {
+        // Replace asterisks with empty string and make bold
+        final content = line.replaceAll('*', '');
+        widgets.add(
+          Padding(
+            padding: const EdgeInsets.only(top: 8, bottom: 4),
+            child: Text(
+              content,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        );
+      }
+      // Handle separator lines
+      else if (line.startsWith('---')) {
+        widgets.add(
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Container(
+              height: 1,
+              color: Colors.grey.shade600,
+            ),
+          ),
+        );
+      }
+      // Regular text
+      else {
+        widgets.add(
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text(
+              line,
+              style: const TextStyle(color: Colors.white),
+            ),
+          ),
+        );
+      }
+    }
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: widgets,
     );
   }
   
