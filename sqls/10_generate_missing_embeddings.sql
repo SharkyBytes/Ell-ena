@@ -43,3 +43,5 @@ SELECT cron.schedule(
 
 -- You can also run it manually once to process existing meetings:
 -- SELECT process_meetings_missing_embeddings();
+
+
