@@ -3,7 +3,7 @@
 
 **Ell-ena** is your AI-powered teammate that makes managing work effortless. From automatically creating tickets to capturing every detail in meeting transcriptions, Ell-ena keeps the full context of your projects at its fingertips—so nothing ever falls through the cracks.  
 
-It’s like having a smart, proactive teammate who anticipates what you need, organizes your workflow, and helps you stay on top of everything… without you even asking. With Ell-ena, productivity has never felt this seamless.
+It’s like having a smart, proactive teammate who anticipates what you need, organizes your workflow, and helps you stay on top of everything… without you even asking.
 
 ![Group 7 (1)](https://github.com/user-attachments/assets/442823c1-5ee6-4112-8dcf-0793ad9a7455)
 
@@ -50,7 +50,34 @@ Ell-ena implements a sophisticated architecture that combines Flutter for cross-
 └───────────────┴─────────────────┴────────────────────┴─────────────────┘
 ```
 
-### System Components
+
+## ✨ Current Implementation
+
+https://github.com/user-attachments/assets/6542489e-1f00-4802-a8eb-abdbb86d1392
+
+I’ve made demo videos for Ell-ena and separated them by features. So, we can directly check out the RAG & vector search implementation or the bot transcriber. please see this through the drive link. Loved building Ell-ena—would be super excited to see new ideas fixes and features coming up and getting it merged soon! 🚀
+
+[GOOGLE DRIVE](https://drive.google.com/drive/folders/1e-hs3RkLlPo3zJ8AkaV9rVmmyt7J2mpS?usp=sharing)
+
+
+## ✨ Architecture of Ell-ena
+
+<img width="2072" height="1592" alt="NoteGPT-Sequence Diagram-1756295185752" src="https://github.com/user-attachments/assets/07ca0a2c-200e-4669-9c8a-1294dd78e789" />
+
+
+
+## ✨ Key Features
+
+- Generate to-do items and tickets using natural language commands
+- Transcribe meetings and maintain full contextual notes
+- Chat-based interface for intuitive and seamless user interactions
+- Context-aware automation to enrich task details automatically
+- RAG (Retrieval-Augmented Generation) implementation for contextual intelligence
+- Multi-account login support with team management capabilities
+- Real-time collaboration features across teams
+
+
+## ✨ System Components
 
 #### 1. Frontend Layer (Flutter)
 - **Auth Module**: Handles user authentication, team management, and role-based access control
@@ -99,19 +126,6 @@ Ell-ena implements a sophisticated architecture that combines Flutter for cross-
    - UI updates in real-time through Supabase subscriptions
    - User receives intelligent, context-aware responses
 
-## ✨ Current Implementation
-
-https://github.com/user-attachments/assets/9e065304-9e79-4c4a-8e58-b961b226ba0b
-
-## ✨ Key Features
-
-- Generate to-do items and tickets using natural language commands
-- Transcribe meetings and maintain full contextual notes
-- Chat-based interface for intuitive and seamless user interactions
-- Context-aware automation to enrich task details automatically
-- RAG (Retrieval-Augmented Generation) implementation for contextual intelligence
-- Multi-account login support with team management capabilities
-- Real-time collaboration features across teams
 
 ## 🚀 Getting Started
 
@@ -228,5 +242,6 @@ Reference designs for the project can be found here:
 
 
 ---
+
 
 **Note:** This project is part of **GSoC'25 under AOSSIE** and is actively under development.
