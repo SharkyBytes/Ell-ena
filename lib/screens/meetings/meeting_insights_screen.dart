@@ -22,12 +22,18 @@ class _MeetingInsightsScreenState extends State<MeetingInsightsScreen> with Sing
   Map<String, dynamic>? _meeting; // includes final_transcription and meeting_summary_json
   late TabController _tabController;
 
-  @override
+ @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this, initialIndex: widget.initialTab == 'summary' ? 1 : 0);
     _load();
   }
+
+@override
+void dispose() {
+  _tabController.dispose();
+  super.dispose();
+}
 
   Future<void> _load() async {
     setState(() => _isLoading = true);

@@ -66,16 +66,29 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
   Future<void> _initSpeech() async {
     _speech = stt.SpeechToText();
-    _speechAvailable = await _speech.initialize(
-      onStatus: (status) {
+      _speechAvailable = await _speech.initialize(
+       onStatus: (status) {
         if (status == 'done' || status == 'notListening') {
-          setState(() => _isListening = false);
+          if (mounted) {
+            setState(() => _isListening = false);
+            // Dismiss dialog if open
+            if (Navigator.of(context).canPop()) {
+              Navigator.of(context).pop();
+            }
+          }
         }
-      },
-      onError: (error) {
+       },
+       onError: (error) {
         setState(() => _isListening = false);
-      },
-    );
+        if (mounted) {
+          setState(() => _isListening = false);
+          if (Navigator.of(context).canPop()) {
+            Navigator.of(context).pop();
+          }
+        }
+       },
+     );     
+
     if (mounted) setState(() {});
   }
   
