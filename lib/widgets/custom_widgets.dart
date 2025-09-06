@@ -13,7 +13,6 @@ class CustomTextField extends StatelessWidget {
   final Function(String)? onChanged;
   final bool enabled;
   
-  // For backward compatibility
   final String? label;
   final IconData? icon;
   final bool? isPassword;
@@ -28,7 +27,6 @@ class CustomTextField extends StatelessWidget {
     this.validator,
     this.onChanged,
     this.enabled = true,
-    // For backward compatibility
     this.label,
     this.icon,
     this.isPassword,
@@ -36,7 +34,6 @@ class CustomTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Use backward compatibility parameters if provided
     final String effectiveHintText = label ?? hintText;
     final IconData? effectivePrefixIcon = icon ?? prefixIcon;
     final bool effectiveObscureText = isPassword ?? obscureText;

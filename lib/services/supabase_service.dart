@@ -13,19 +13,15 @@ class SupabaseService {
   late final SupabaseClient _client;
   bool _isInitialized = false;
   
-  // Cache for team members to avoid repeated network calls
   List<Map<String, dynamic>> _teamMembersCache = [];
   String? _currentTeamId;
   
-  // Cache for current user profile
   Map<String, dynamic>? _userProfileCache;
   
-  // Stream controllers for real-time updates
   final _tasksStreamController = StreamController<List<Map<String, dynamic>>>.broadcast();
   final _ticketsStreamController = StreamController<List<Map<String, dynamic>>>.broadcast();
   final _meetingsStreamController = StreamController<List<Map<String, dynamic>>>.broadcast();
   
-  // Getters for streams
   Stream<List<Map<String, dynamic>>> get tasksStream => _tasksStreamController.stream;
   Stream<List<Map<String, dynamic>>> get ticketsStream => _ticketsStreamController.stream;
   Stream<List<Map<String, dynamic>>> get meetingsStream => _meetingsStreamController.stream;
@@ -38,20 +34,16 @@ class SupabaseService {
   
   bool get isInitialized => _isInitialized;
   
-  // Getter for team members cache
   List<Map<String, dynamic>> get teamMembersCache => _teamMembersCache;
   
   Future<void> initialize() async {
     if (_isInitialized) return;
     
     try {
-      // Try to load from .env file
       await dotenv.load().catchError((e) {
         debugPrint('Error loading .env file: $e');
-        // If .env file is not found, we'll use hardcoded values below
       });
       
-      // Get values from .env or use placeholder values for development
       final supabaseUrl = dotenv.env['SUPABASE_URL'] ?? '';
       final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'] ?? '';
 
@@ -66,10 +58,8 @@ class SupabaseService {
       _client = Supabase.instance.client;
       _isInitialized = true;
       
-      // Load cached user profile
       await _loadCachedUserProfile();
       
-      // Load team members after initialization if user is logged in
       await _loadTeamMembersIfLoggedIn();
     } catch (e) {
       debugPrint('Error initializing Supabase: $e');
@@ -77,7 +67,6 @@ class SupabaseService {
     } 
   }
   
-  // Load cached user profile from local storage
   Future<void> _loadCachedUserProfile() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -92,7 +81,6 @@ class SupabaseService {
     }
   }
   
-  // Save user profile to local storage
   Future<void> _saveUserProfileToCache(Map<String, dynamic> profile) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -104,7 +92,6 @@ class SupabaseService {
     }
   }
   
-  // Clear cached user profile
   Future<void> _clearCachedUserProfile() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -132,7 +119,6 @@ class SupabaseService {
     }
   }
   
-  // Load team members and cache them
   Future<void> loadTeamMembers(String teamIdOrCode) async {
     try {
       if (!_isInitialized) return;
@@ -317,7 +303,6 @@ class SupabaseService {
       
       final teamIdUuid = teamResponse[0]['id'];
       
-      // Step 2: Register the user
       final authResponse = await _client.auth.signUp(
         email: email,
         password: password,
@@ -329,7 +314,6 @@ class SupabaseService {
       
       final userId = authResponse.user!.id;
       
-      // Step 3: Add user to the team
       await _client.from('users').insert({
         'id': userId,
         'full_name': fullName,
@@ -351,7 +335,6 @@ class SupabaseService {
     }
   }
   
-  // Check if a team ID exists
   Future<bool> teamExists(String teamId) async {
     try {
       if (!_isInitialized) return false;
@@ -1670,6 +1653,7 @@ class SupabaseService {
     String? description,
     required DateTime meetingDate,
     String? meetingUrl,
+    int durationMinutes = 60,
   }) async {
     try {
       if (!_isInitialized) {
@@ -1706,6 +1690,7 @@ class SupabaseService {
         'meeting_url': meetingUrl,
         'team_id': teamId,
         'created_by': user.id,
+        'duration_minutes': durationMinutes,
       };
       
       final response = await _client
@@ -1780,6 +1765,7 @@ class SupabaseService {
     String? meetingUrl,
     String? transcription,
     String? ai_summary,
+    int? durationMinutes,
   }) async {
     try {
       if (!_isInitialized) {
@@ -1806,7 +1792,7 @@ class SupabaseService {
         'updated_at': DateTime.now().toIso8601String(),
       };
       
-      // Add optional fields if provided
+      // Only add these fields if they are provided
       if (transcription != null) {
         meetingData['transcription'] = transcription;
       }
@@ -1815,16 +1801,29 @@ class SupabaseService {
         meetingData['ai_summary'] = ai_summary;
       }
       
-      await _client
+      if (durationMinutes != null) {
+        meetingData['duration_minutes'] = durationMinutes;
+      }
+      
+      final response = await _client
           .from('meetings')
           .update(meetingData)
-          .eq('id', meetingId);
+          .eq('id', meetingId)
+          .select();
           
+      if (response.isEmpty) {
+        return {
+          'success': false,
+          'error': 'Failed to update meeting',
+        };
+      }
+      
       // Refresh meetings
       await getMeetings();
       
       return {
         'success': true,
+        'meeting': response[0],
       };
     } catch (e) {
       debugPrint('Error updating meeting: $e');
