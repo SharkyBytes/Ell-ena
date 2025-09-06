@@ -7,6 +7,7 @@ import 'package:loading_animation_widget/loading_animation_widget.dart';
 import '../tasks/task_detail_screen.dart';
 import '../tickets/ticket_detail_screen.dart';
 import '../meetings/meeting_detail_screen.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 class ChatScreen extends StatefulWidget {
   final Map<String, dynamic>? arguments;
@@ -22,8 +23,10 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   final ScrollController _scrollController = ScrollController();
   final List<ChatMessage> _messages = [];
   bool _isProcessing = false;
-  bool _isListening = false;
+  bool _isListening = false; // toggles mic icon state
   late AnimationController _waveformController;
+  late final stt.SpeechToText _speech;
+  bool _speechAvailable = false;
   
   // Services
   final AIService _aiService = AIService();
@@ -43,6 +46,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     )..repeat();
     
     _initializeServices();
+    _initSpeech();
     
     // Handle initial message if provided
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -58,6 +62,21 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         });
       }
     });
+  }
+
+  Future<void> _initSpeech() async {
+    _speech = stt.SpeechToText();
+    _speechAvailable = await _speech.initialize(
+      onStatus: (status) {
+        if (status == 'done' || status == 'notListening') {
+          setState(() => _isListening = false);
+        }
+      },
+      onError: (error) {
+        setState(() => _isListening = false);
+      },
+    );
+    if (mounted) setState(() {});
   }
   
   Future<void> _initializeServices() async {
@@ -128,6 +147,9 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     _messageController.dispose();
     _scrollController.dispose();
     _waveformController.dispose();
+    if (_speechAvailable && _speech.isListening) {
+      _speech.stop();
+    }
     super.dispose();
   }
 
@@ -917,78 +939,28 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     }
   }
 
-  void _showVoiceDialog() {
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            backgroundColor: const Color(0xFF2D2D2D),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
-            content: SizedBox(
-              height: 200,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text(
-                    'Start speaking...',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 32),
-                  AnimatedBuilder(
-                    animation: _waveformController,
-                    builder: (context, child) {
-                      return Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: List.generate(
-                          5,
-                          (index) => Container(
-                            margin: const EdgeInsets.symmetric(horizontal: 2),
-                            width: 4,
-                            height:
-                                32 +
-                                32 *
-                                    (0.5 +
-                                            0.5 *
-                                                _waveformController.value *
-                                                (index % 2 == 0 ? 1 : -1))
-                                        .abs(),
-                            decoration: BoxDecoration(
-                              color: Colors.green,
-                              borderRadius: BorderRadius.circular(2),
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 32),
-                  TextButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      setState(() {
-                        _messageController.text =
-                            "Create a math assignment for next Tuesday and set the deadline for Wednesday.";
-                      });
-                    },
-                    child: const Text(
-                      'Stop Listening',
-                      style: TextStyle(
-                        color: Colors.green,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+  Future<void> _toggleListening() async {
+    if (!_speechAvailable) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Speech recognition not available on this device')),
+      );
+      return;
+    }
+    if (_speech.isListening) {
+      await _speech.stop();
+      setState(() => _isListening = false);
+      return;
+    }
+    setState(() => _isListening = true);
+    await _speech.listen(
+      onResult: (result) {
+        setState(() {
+          _messageController.text = result.recognizedWords;
+        });
+      },
+      listenMode: stt.ListenMode.dictation,
+      partialResults: true,
+      cancelOnError: true,
     );
   }
 
@@ -1161,8 +1133,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                     ],
                   ),
                   child: IconButton(
-                    onPressed: _showVoiceDialog,
-                    icon: const Icon(Icons.mic),
+                    onPressed: _toggleListening,
+                    icon: Icon(_isListening ? Icons.stop : Icons.mic),
                     color: Colors.white,
                   ),
                 ),

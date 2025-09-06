@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../widgets/custom_widgets.dart';
-import 'dart:math' as math;
 import 'package:fl_chart/fl_chart.dart';
+import 'package:intl/intl.dart';
+import '../../services/supabase_service.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -15,6 +16,17 @@ class _DashboardScreenState extends State<DashboardScreen>
   late AnimationController _controller;
   int _selectedTimeRange = 1; // 0: Week, 1: Month, 2: Year
   bool _isLoading = true;
+  String? _userName;
+  int _tasksTotal = 0;
+  int _tasksInProgress = 0;
+  int _tasksCompleted = 0;
+  int _ticketsOpen = 0;
+  int _ticketsInProgress = 0;
+  int _ticketsResolved = 0;
+  List<Map<String, dynamic>> _upcomingMeetings = [];
+  List<Map<String, dynamic>> _recentTasks = [];
+  List<Map<String, dynamic>> _recentTickets = [];
+  List<FlSpot> _taskCompletionSpots = [];
 
   @override
   void initState() {
@@ -23,21 +35,114 @@ class _DashboardScreenState extends State<DashboardScreen>
       duration: const Duration(seconds: 20),
       vsync: this,
     )..repeat();
-    
-    // Simulate loading delay
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    });
+    _loadData();
   }
 
   @override
   void dispose() {
     _controller.dispose();
     super.dispose();
+  }
+
+  Future<void> _onRefresh() async {
+    await _loadData();
+  }
+
+  Future<void> _loadData() async {
+    try {
+      setState(() {
+        _isLoading = true;
+      });
+
+      final supa = SupabaseService();
+
+      final profileFuture = supa.getCurrentUserProfile(forceRefresh: true);
+      final tasksFuture = supa.getTasks();
+      final ticketsFuture = supa.getTickets();
+      final meetingsFuture = supa.getMeetings();
+
+      final results = await Future.wait([
+        profileFuture,
+        tasksFuture,
+        ticketsFuture,
+        meetingsFuture,
+      ]);
+
+      final profile = results[0] as Map<String, dynamic>?;
+      final tasks = List<Map<String, dynamic>>.from(results[1] as List);
+      final tickets = List<Map<String, dynamic>>.from(results[2] as List);
+      final meetings = List<Map<String, dynamic>>.from(results[3] as List);
+
+      _userName = (profile?['full_name'] as String?)?.trim();
+
+      _tasksTotal = tasks.length;
+      _tasksInProgress = tasks.where((t) => t['status'] == 'in_progress').length;
+      _tasksCompleted = tasks.where((t) => t['status'] == 'completed').length;
+
+      // Build completion series for last 7 days
+      final now = DateTime.now();
+      final Map<int, int> dayIndexToCompleted = {for (var i = 0; i < 7; i++) i: 0};
+      for (final t in tasks) {
+        if (t['status'] == 'completed') {
+          final ts = (t['updated_at'] ?? t['created_at'])?.toString();
+          if (ts != null) {
+            final updated = DateTime.tryParse(ts);
+            if (updated != null) {
+              final diffDays = now
+                  .difference(DateTime(updated.year, updated.month, updated.day))
+                  .inDays;
+              if (diffDays >= 0 && diffDays < 7) {
+                final idx = 6 - diffDays; // earlier days on the left
+                dayIndexToCompleted[idx] = (dayIndexToCompleted[idx] ?? 0) + 1;
+              }
+            }
+          }
+        }
+      }
+      _taskCompletionSpots = List.generate(
+        7,
+        (i) => FlSpot(i.toDouble(), (dayIndexToCompleted[i] ?? 0).toDouble()),
+      );
+
+      _ticketsOpen = tickets.where((t) => t['status'] == 'open').length;
+      _ticketsInProgress = tickets.where((t) => t['status'] == 'in_progress').length;
+      _ticketsResolved = tickets.where((t) => t['status'] == 'resolved').length;
+
+      // Upcoming meetings (next 14 days)
+      final upcoming = <Map<String, dynamic>>[];
+      for (final m in meetings) {
+        final md = DateTime.tryParse(m['meeting_date']?.toString() ?? '');
+        if (md != null && md.isAfter(now.subtract(const Duration(days: 1))) && md.isBefore(now.add(const Duration(days: 14)))) {
+          upcoming.add(m);
+        }
+      }
+      upcoming.sort((a, b) {
+        final ad = DateTime.tryParse(a['meeting_date']?.toString() ?? '') ?? now;
+        final bd = DateTime.tryParse(b['meeting_date']?.toString() ?? '') ?? now;
+        return ad.compareTo(bd);
+      });
+      _upcomingMeetings = upcoming.take(5).toList();
+
+      // Recent
+      tasks.sort((a, b) => (DateTime.tryParse((b['updated_at'] ?? b['created_at'])?.toString() ?? '') ?? now)
+          .compareTo(DateTime.tryParse((a['updated_at'] ?? a['created_at'])?.toString() ?? '') ?? now));
+      tickets.sort((a, b) => (DateTime.tryParse((b['updated_at'] ?? b['created_at'])?.toString() ?? '') ?? now)
+          .compareTo(DateTime.tryParse((a['updated_at'] ?? a['created_at'])?.toString() ?? '') ?? now));
+      _recentTasks = tasks.take(3).toList();
+      _recentTickets = tickets.take(3).toList();
+
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   @override
@@ -50,8 +155,13 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
     return Scaffold(
       backgroundColor: const Color(0xFF1A1A1A),
-      body: CustomScrollView(
-        slivers: [
+      body: RefreshIndicator(
+        onRefresh: _onRefresh,
+        color: Colors.green,
+        backgroundColor: const Color(0xFF2D2D2D),
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
           SliverAppBar(
             backgroundColor: Colors.transparent,
             elevation: 0,
@@ -124,9 +234,9 @@ class _DashboardScreenState extends State<DashboardScreen>
                                     const SizedBox(height: 4),
                                     Row(
                                       children: [
-                                        const Text(
-                                          'John Doe',
-                                          style: TextStyle(
+                                        Text(
+                                          _userName ?? '—',
+                                          style: const TextStyle(
                                             color: Colors.white,
                                             fontSize: 24,
                                             fontWeight: FontWeight.bold,
@@ -157,12 +267,9 @@ class _DashboardScreenState extends State<DashboardScreen>
                                               ),
                                               const SizedBox(width: 4),
                                               Text(
-                                                '+15%',
+                                                '+${_tasksCompleted > 0 && _tasksTotal > 0 ? ((_tasksCompleted / (_tasksTotal == 0 ? 1 : _tasksTotal)) * 100).round() : 0}%',
                                                 style: TextStyle(
-                                                  color:
-                                                      Colors
-                                                          .greenAccent
-                                                          .shade100,
+                                                  color: Colors.greenAccent.shade100,
                                                   fontSize: 12,
                                                   fontWeight: FontWeight.bold,
                                                 ),
@@ -209,6 +316,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           ),
         ],
       ),
+    ),
     );
   }
 
@@ -274,22 +382,46 @@ class _DashboardScreenState extends State<DashboardScreen>
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               _buildOverviewItem(
-                '14',
+                _tasksTotal.toString(),
                 'Total Tasks',
                 Icons.task_alt,
                 Colors.green.shade400,
               ),
               _buildOverviewItem(
-                '3',
+                _tasksInProgress.toString(),
                 'In Progress',
                 Icons.pending_actions,
                 Colors.orange.shade400,
               ),
               _buildOverviewItem(
-                '8',
+                _tasksCompleted.toString(),
                 'Completed',
                 Icons.check_circle_outline,
                 Colors.blue.shade400,
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildOverviewItem(
+                _ticketsOpen.toString(),
+                'Open Tickets',
+                Icons.bug_report,
+                Colors.red.shade400,
+              ),
+              _buildOverviewItem(
+                _ticketsInProgress.toString(),
+                'Tickets In Progress',
+                Icons.hourglass_bottom,
+                Colors.amber.shade400,
+              ),
+              _buildOverviewItem(
+                _ticketsResolved.toString(),
+                'Resolved',
+                Icons.verified,
+                Colors.teal.shade300,
               ),
             ],
           ),
@@ -345,7 +477,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text(
-                'Task Completion',
+                'Task Completion (Last 7 days)',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 18,
@@ -370,83 +502,74 @@ class _DashboardScreenState extends State<DashboardScreen>
           const SizedBox(height: 20),
           SizedBox(
             height: 200,
-            child: LineChart(
-              LineChartData(
-                gridData: FlGridData(show: false),
-                titlesData: FlTitlesData(
-                  leftTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 30,
-                      getTitlesWidget: (value, meta) {
-                        return Text(
-                          value.toInt().toString(),
-                          style: TextStyle(
-                            color: Colors.grey.shade400,
-                            fontSize: 12,
+            child: _taskCompletionSpots.isEmpty
+                ? Center(
+                    child: Text(
+                      'No completions yet',
+                      style: TextStyle(color: Colors.grey.shade500),
+                    ),
+                  )
+                : LineChart(
+                    LineChartData(
+                      gridData: FlGridData(show: false),
+                      titlesData: FlTitlesData(
+                        leftTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            reservedSize: 30,
+                            getTitlesWidget: (value, meta) {
+                              return Text(
+                                value.toInt().toString(),
+                                style: TextStyle(
+                                  color: Colors.grey.shade400,
+                                  fontSize: 12,
+                                ),
+                              );
+                            },
                           ),
-                        );
-                      },
+                        ),
+                        bottomTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            reservedSize: 30,
+                            getTitlesWidget: (value, meta) {
+                              final now = DateTime.now();
+                              final idx = value.toInt();
+                              if (idx < 0 || idx > 6) return const SizedBox();
+                              final day = now.subtract(Duration(days: 6 - idx));
+                              return Text(
+                                DateFormat('E').format(day),
+                                style: TextStyle(
+                                  color: Colors.grey.shade400,
+                                  fontSize: 12,
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        rightTitles: AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                        topTitles: AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                      ),
+                      borderData: FlBorderData(show: false),
+                      lineBarsData: [
+                        LineChartBarData(
+                          spots: _taskCompletionSpots,
+                          isCurved: true,
+                          color: Colors.green.shade400,
+                          barWidth: 3,
+                          dotData: FlDotData(show: false),
+                          belowBarData: BarAreaData(
+                            show: true,
+                            color: Colors.green.shade400.withOpacity(0.1),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 30,
-                      getTitlesWidget: (value, meta) {
-                        final labels = [
-                          'Mon',
-                          'Tue',
-                          'Wed',
-                          'Thu',
-                          'Fri',
-                          'Sat',
-                          'Sun',
-                        ];
-                        if (value.toInt() < labels.length) {
-                          return Text(
-                            labels[value.toInt()],
-                            style: TextStyle(
-                              color: Colors.grey.shade400,
-                              fontSize: 12,
-                            ),
-                          );
-                        }
-                        return const Text('');
-                      },
-                    ),
-                  ),
-                  rightTitles: AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                  topTitles: AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                ),
-                borderData: FlBorderData(show: false),
-                lineBarsData: [
-                  LineChartBarData(
-                    spots: [
-                      const FlSpot(0, 3),
-                      const FlSpot(1, 4),
-                      const FlSpot(2, 3.5),
-                      const FlSpot(3, 5),
-                      const FlSpot(4, 4),
-                      const FlSpot(5, 6),
-                      const FlSpot(6, 5),
-                    ],
-                    isCurved: true,
-                    color: Colors.green.shade400,
-                    barWidth: 3,
-                    dotData: FlDotData(show: false),
-                    belowBarData: BarAreaData(
-                      show: true,
-                      color: Colors.green.shade400.withOpacity(0.1),
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ),
         ],
       ),
@@ -494,30 +617,35 @@ class _DashboardScreenState extends State<DashboardScreen>
             color: const Color(0xFF2D2D2D),
             borderRadius: BorderRadius.circular(20),
           ),
-          child: Column(
-            children: [
-              _buildUpcomingItem(
-                'Team Meeting',
-                '10:00 AM',
-                Icons.groups,
-                Colors.blue.shade400,
-              ),
-              const Divider(color: Colors.grey),
-              _buildUpcomingItem(
-                'Project Review',
-                '2:30 PM',
-                Icons.assessment,
-                Colors.orange.shade400,
-              ),
-              const Divider(color: Colors.grey),
-              _buildUpcomingItem(
-                'Client Call',
-                '4:00 PM',
-                Icons.phone,
-                Colors.purple.shade400,
-              ),
-            ],
-          ),
+          child: _upcomingMeetings.isEmpty
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    child: Text(
+                      'No upcoming meetings',
+                      style: TextStyle(color: Colors.grey.shade400),
+                    ),
+                  ),
+                )
+              : Column(
+                  children: List.generate(_upcomingMeetings.length, (index) {
+                    final m = _upcomingMeetings[index];
+                    final dt = DateTime.tryParse(m['meeting_date']?.toString() ?? '');
+                    final timeLabel = dt != null ? DateFormat('MMM d • h:mm a').format(dt) : '';
+                    final color = Colors.blue.shade400;
+                    return Column(
+                      children: [
+                        _buildUpcomingItem(
+                          (m['title'] as String?) ?? 'Meeting',
+                          timeLabel,
+                          Icons.groups,
+                          color,
+                        ),
+                        if (index < _upcomingMeetings.length - 1) const Divider(color: Colors.grey),
+                      ],
+                    );
+                  }),
+                ),
         ),
       ],
     );
@@ -586,89 +714,100 @@ class _DashboardScreenState extends State<DashboardScreen>
             color: const Color(0xFF2D2D2D),
             borderRadius: BorderRadius.circular(20),
           ),
-          child: Column(
-            children: List.generate(3, (index) {
-              return Column(
-                children: [
-                  _buildActivityItem(index),
-                  if (index < 2) const Divider(color: Colors.grey),
-                ],
-              );
-            }),
-          ),
+          child: _buildDynamicActivityList(),
         ),
       ],
     );
   }
 
-  Widget _buildActivityItem(int index) {
-    final activities = [
-      {
-        'title': 'Task Completed',
-        'description': 'UI Design Implementation',
-        'time': '2h ago',
+  Widget _buildDynamicActivityList() {
+    final items = <Map<String, dynamic>>[];
+    for (final t in _recentTasks) {
+      items.add({
+        'type': 'Task',
+        'title': t['title'] ?? 'Task',
+        'status': t['status'] ?? 'todo',
+        'time': t['updated_at'] ?? t['created_at'],
         'icon': Icons.task_alt,
         'color': Colors.green.shade400,
-      },
-      {
-        'title': 'New Comment',
-        'description': 'John commented on your task',
-        'time': '3h ago',
-        'icon': Icons.comment,
-        'color': Colors.blue.shade400,
-      },
-      {
-        'title': 'Meeting Scheduled',
-        'description': 'Team sync at 4 PM',
-        'time': '5h ago',
-        'icon': Icons.calendar_today,
-        'color': Colors.purple.shade400,
-      },
-    ];
+      });
+    }
+    for (final tk in _recentTickets) {
+      items.add({
+        'type': 'Ticket',
+        'title': tk['title'] ?? 'Ticket',
+        'status': tk['status'] ?? 'open',
+        'time': tk['updated_at'] ?? tk['created_at'],
+        'icon': Icons.confirmation_number,
+        'color': Colors.orange.shade400,
+      });
+    }
+    items.sort((a, b) {
+      final ta = DateTime.tryParse(a['time']?.toString() ?? '') ?? DateTime.now();
+      final tb = DateTime.tryParse(b['time']?.toString() ?? '') ?? DateTime.now();
+      return tb.compareTo(ta);
+    });
+    final limited = items.take(5).toList();
 
-    final activity = activities[index];
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: (activity['color'] as Color).withOpacity(0.1),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              activity['icon'] as IconData,
-              color: activity['color'] as Color,
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  activity['title'] as String,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
+    if (limited.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Text('No recent activity', style: TextStyle(color: Colors.grey.shade400)),
+        ),
+      );
+    }
+
+    return Column(
+      children: List.generate(limited.length, (index) {
+        final a = limited[index];
+        final date = DateTime.tryParse(a['time']?.toString() ?? '');
+        final timeLabel = date != null ? DateFormat('MMM d, h:mm a').format(date) : '';
+        return Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: (a['color'] as Color).withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(a['icon'] as IconData, color: a['color'] as Color, size: 20),
                   ),
-                ),
-                Text(
-                  activity['description'] as String,
-                  style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-                ),
-              ],
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${a['type']}: ${a['title']}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          'Status: ${a['status']}',
+                          style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Text(
+                    timeLabel,
+                    style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
+                  ),
+                ],
+              ),
             ),
-          ),
-          Text(
-            activity['time'] as String,
-            style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
-          ),
-        ],
-      ),
+            if (index < limited.length - 1) const Divider(color: Colors.grey),
+          ],
+        );
+      }),
     );
   }
 
@@ -695,7 +834,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             children: [
               _buildMetricItem(
                 'Task Completion Rate',
-                0.85,
+                _tasksTotal == 0 ? 0 : _tasksCompleted / _tasksTotal,
                 Colors.green.shade400,
               ),
               const SizedBox(height: 16),

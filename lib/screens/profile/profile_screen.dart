@@ -375,13 +375,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
           ),
           const SizedBox(height: 20),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _buildStatItem('Tasks\nCompleted', '127', Colors.green.shade400),
-              _buildStatItem('Hours\nLogged', '284', Colors.blue.shade400),
-              _buildStatItem('Team\nProjects', '12', Colors.purple.shade400),
-            ],
+          FutureBuilder<List<Map<String, dynamic>>>(
+            future: SupabaseService().getTasks(),
+            builder: (context, snapshot) {
+              final tasks = snapshot.data ?? const <Map<String, dynamic>>[];
+              final completed = tasks.where((t) => t['status'] == 'completed').length;
+              // Placeholder dynamic numbers while no time tracking/projects table
+              final hours = (tasks.length * 2).toString();
+              final projects =  (tasks.map((t) => t['team_id']).toSet().length).toString();
+              return Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _buildStatItem('Tasks\nCompleted', completed.toString(), Colors.green.shade400),
+                  _buildStatItem('Hours\nLogged', hours, Colors.blue.shade400),
+                  _buildStatItem('Team\nProjects', projects, Colors.purple.shade400),
+                ],
+              );
+            },
           ),
         ],
       ),
