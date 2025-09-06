@@ -17,7 +17,7 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
-  int _selectedTimeRange = 1; // 0: Week, 1: Month, 2: Year
+  int _selectedTimeRange = 0; // 0: Week, 1: Month
   bool _isLoading = true;
   String? _userName;
 
@@ -523,7 +523,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           SliverAppBar(
             backgroundColor: Colors.transparent,
             elevation: 0,
-            expandedHeight: 160,
+            expandedHeight: 140,
             pinned: true,
             flexibleSpace: FlexibleSpaceBar(
               background: Stack(
@@ -548,7 +548,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                     painter: DotPatternPainter(
                       color: Colors.white.withOpacity(0.1),
                     ),
-                    size: Size(MediaQuery.of(context).size.width, 160),
+                    size: Size(MediaQuery.of(context).size.width, 140),
                   ),
                   SafeArea(
                     child: Padding(
@@ -583,14 +583,15 @@ class _DashboardScreenState extends State<DashboardScreen>
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
+                                  
                                     const Text(
                                       'Welcome back,',
                                       style: TextStyle(
                                         color: Colors.white70,
-                                        fontSize: 14,
+                                        fontSize: 12,
                                       ),
                                     ),
-                                    const SizedBox(height: 4),
+                                    const SizedBox(height: 2),
                                     Row(
                                       children: [
 
@@ -599,7 +600,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                                             _userName ?? '—',
                                             style: const TextStyle(
                                               color: Colors.white,
-                                              fontSize: 24,
+                                              fontSize: 20,
                                               fontWeight: FontWeight.bold,
                                             ),
                                             overflow: TextOverflow.ellipsis,
@@ -697,7 +698,6 @@ class _DashboardScreenState extends State<DashboardScreen>
                     const SizedBox(height: 24),
                     _buildRecentActivity(),
                     const SizedBox(height: 24),
-                    _buildPerformanceMetrics(),
                   ],
                 ),
               ),
@@ -886,7 +886,6 @@ class _DashboardScreenState extends State<DashboardScreen>
                   children: [
                     _timeRangeButton('Week', 0),
                     _timeRangeButton('Month', 1),
-                    _timeRangeButton('Year', 2),
                   ],
                 ),
               ),
@@ -902,7 +901,9 @@ class _DashboardScreenState extends State<DashboardScreen>
                       style: TextStyle(color: Colors.grey.shade500),
                     ),
                   )
-                : BarChart(
+                : _selectedTimeRange == 0 
+                  // Bar Chart for Weekly view
+                  ? BarChart(
                     BarChartData(
                       gridData: FlGridData(
                         show: true,
@@ -979,6 +980,78 @@ class _DashboardScreenState extends State<DashboardScreen>
                         );
                       }).toList(),
 
+                    ),
+                  )
+                  // Line Chart for Monthly view
+                  : LineChart(
+                    LineChartData(
+                      gridData: FlGridData(
+                        show: true,
+                        drawVerticalLine: false,
+                        horizontalInterval: 1,
+                        getDrawingHorizontalLine: (value) {
+                          return FlLine(
+                            color: Colors.grey.shade800,
+                            strokeWidth: 1,
+                          );
+                        },
+                      ),
+                      titlesData: FlTitlesData(
+                        leftTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            reservedSize: 30,
+                            getTitlesWidget: (value, meta) {
+                              return Text(
+                                value.toInt().toString(),
+                                style: TextStyle(
+                                  color: Colors.grey.shade400,
+                                  fontSize: 12,
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        bottomTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            reservedSize: 30,
+                            getTitlesWidget: (value, meta) {
+                              final now = DateTime.now();
+                              final idx = value.toInt();
+                              if (idx < 0 || idx > 6) return const SizedBox();
+                              final day = now.subtract(Duration(days: 6 - idx));
+                              return Text(
+                                DateFormat('E').format(day),
+                                style: TextStyle(
+                                  color: Colors.grey.shade400,
+                                  fontSize: 12,
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        rightTitles: AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                        topTitles: AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                      ),
+                      borderData: FlBorderData(show: false),
+                      lineBarsData: [
+                        LineChartBarData(
+                          spots: _taskCompletionSpots,
+                          isCurved: true,
+                          color: Colors.green.shade400,
+                          barWidth: 3,
+                          dotData: FlDotData(show: true),
+                          belowBarData: BarAreaData(
+                            show: true,
+                            color: Colors.green.shade400.withOpacity(0.1),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
           ),
@@ -1248,77 +1321,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  Widget _buildPerformanceMetrics() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Performance Metrics',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
-        ),
-        const SizedBox(height: 16),
-        Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: const Color(0xFF2D2D2D),
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Column(
-            children: [
-              _buildMetricItem(
-                'Task Completion Rate',
-                _tasksTotal == 0 ? 0 : _tasksCompleted / _tasksTotal,
-                Colors.green.shade400,
-              ),
-              const SizedBox(height: 16),
-              _buildMetricItem('On-time Delivery', 0.92, Colors.blue.shade400),
-              const SizedBox(height: 16),
-              _buildMetricItem(
-                'Team Collaboration',
-                0.78,
-                Colors.purple.shade400,
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildMetricItem(String label, double value, Color color) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              label,
-              style: const TextStyle(color: Colors.white, fontSize: 14),
-            ),
-            Text(
-              '${(value * 100).round()}%',
-              style: TextStyle(color: color, fontWeight: FontWeight.bold),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(10),
-          child: LinearProgressIndicator(
-            value: value,
-            backgroundColor: color.withOpacity(0.2),
-            valueColor: AlwaysStoppedAnimation<Color>(color),
-            minHeight: 8,
-          ),
-        ),
-      ],
-    );
-  }
+  // Performance metrics section removed
 }
 
 class DotPatternPainter extends CustomPainter {
