@@ -20,6 +20,11 @@ class _DashboardScreenState extends State<DashboardScreen>
   int _selectedTimeRange = 1; // 0: Week, 1: Month, 2: Year
   bool _isLoading = true;
   String? _userName;
+
+  String? _currentTeamId;
+  String? _currentTeamName;
+  List<Map<String, dynamic>> _userTeams = [];
+
   int _tasksTotal = 0;
   int _tasksInProgress = 0;
   int _tasksCompleted = 0;
@@ -40,12 +45,306 @@ class _DashboardScreenState extends State<DashboardScreen>
       vsync: this,
     )..repeat();
     _loadData();
+
   }
 
   @override
   void dispose() {
     _controller.dispose();
     super.dispose();
+  }
+
+  Future<void> _onRefresh() async {
+    await _loadData();
+  }
+  
+  void _showTeamSwitcher() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF2D2D2D),
+          title: const Text(
+            'Switch Team',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: _userTeams.length,
+              itemBuilder: (context, index) {
+                final team = _userTeams[index];
+                final isCurrentTeam = team['id'] == _currentTeamId;
+                
+                return ListTile(
+                  title: Text(
+                    team['name'] ?? 'Team',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: isCurrentTeam ? FontWeight.bold : FontWeight.normal,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'Team Code: ${team['team_code'] ?? 'N/A'}',
+                    style: TextStyle(
+                      color: Colors.grey.shade400,
+                      fontSize: 12,
+                    ),
+                  ),
+                  leading: CircleAvatar(
+                    backgroundColor: isCurrentTeam 
+                        ? Colors.green.shade400 
+                        : Colors.grey.shade700,
+                    child: Text(
+                      (team['name'] as String? ?? 'T')[0].toUpperCase(),
+                      style: const TextStyle(color: Colors.white),
+                    ),
+                  ),
+                  trailing: isCurrentTeam 
+                      ? Icon(Icons.check, color: Colors.green.shade400)
+                      : null,
+                  onTap: () {
+                    if (!isCurrentTeam) {
+                      _switchTeam(team['id']);
+                    }
+                    Navigator.pop(context);
+                  },
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+              },
+              child: Text(
+                'Cancel',
+                style: TextStyle(color: Colors.grey.shade400),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+  
+  Future<void> _switchTeam(String teamId) async {
+    try {
+      setState(() {
+        _isLoading = true;
+      });
+      
+      final supa = SupabaseService();
+      final result = await supa.switchTeam(teamId);
+      
+      if (result['success'] == true) {
+        // Reload data with new team
+        await _loadData();
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error switching team: ${result['error']}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Error switching team: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error switching team: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+
+  }
+
+  Future<void> _loadData() async {
+    try {
+      setState(() {
+        _isLoading = true;
+      });
+
+      final supa = SupabaseService();
+
+      // Get user profile with team information
+      final profile = await supa.getCurrentUserProfile(forceRefresh: true);
+      
+      // Set username
+      _userName = (profile?['full_name'] as String?)?.trim();
+      
+      // Set current team
+      if (profile != null && profile['team_id'] != null) {
+        _currentTeamId = profile['team_id'];
+        _currentTeamName = profile['teams']?['name'] ?? 'My Team';
+      }
+      
+      // Fetch all teams associated with the user's email
+      final userEmail = profile?['email'] as String?;
+      if (userEmail != null) {
+        try {
+          final teamsResponse = await supa.getUserTeams(userEmail);
+          if (teamsResponse['success'] == true && teamsResponse['teams'] != null) {
+            _userTeams = List<Map<String, dynamic>>.from(teamsResponse['teams']);
+          }
+        } catch (e) {
+          debugPrint('Error fetching user teams: $e');
+        }
+      }
+
+      // Load other data
+      final tasksFuture = supa.getTasks();
+      final ticketsFuture = supa.getTickets();
+      final meetingsFuture = supa.getMeetings();
+
+      final results = await Future.wait([
+        tasksFuture,
+        ticketsFuture,
+        meetingsFuture,
+      ]);
+
+      final tasks = List<Map<String, dynamic>>.from(results[0] as List);
+      final tickets = List<Map<String, dynamic>>.from(results[1] as List);
+      final meetings = List<Map<String, dynamic>>.from(results[2] as List);
+
+      _tasksTotal = tasks.length;
+      _tasksInProgress = tasks.where((t) => t['status'] == 'in_progress').length;
+      _tasksCompleted = tasks.where((t) => t['status'] == 'completed').length;
+
+      // Build completion series for last 7 days
+      final now = DateTime.now();
+      final Map<int, int> dayIndexToCompleted = {for (var i = 0; i < 7; i++) i: 0};
+      for (final t in tasks) {
+        if (t['status'] == 'completed') {
+          final ts = (t['updated_at'] ?? t['created_at'])?.toString();
+          if (ts != null) {
+            final updated = DateTime.tryParse(ts);
+            if (updated != null) {
+              final diffDays = now
+                  .difference(DateTime(updated.year, updated.month, updated.day))
+                  .inDays;
+              if (diffDays >= 0 && diffDays < 7) {
+                final idx = 6 - diffDays; // earlier days on the left
+                dayIndexToCompleted[idx] = (dayIndexToCompleted[idx] ?? 0) + 1;
+              }
+            }
+          }
+        }
+      }
+      _taskCompletionSpots = List.generate(
+        7,
+        (i) => FlSpot(i.toDouble(), (dayIndexToCompleted[i] ?? 0).toDouble()),
+      );
+
+      _ticketsOpen = tickets.where((t) => t['status'] == 'open').length;
+      _ticketsInProgress = tickets.where((t) => t['status'] == 'in_progress').length;
+      _ticketsResolved = tickets.where((t) => t['status'] == 'resolved').length;
+
+      // Upcoming meetings (next 14 days)
+      final upcoming = <Map<String, dynamic>>[];
+      for (final m in meetings) {
+        final md = DateTime.tryParse(m['meeting_date']?.toString() ?? '');
+        if (md != null && md.isAfter(now.subtract(const Duration(days: 1))) && md.isBefore(now.add(const Duration(days: 14)))) {
+          upcoming.add(m);
+        }
+      }
+      upcoming.sort((a, b) {
+        final ad = DateTime.tryParse(a['meeting_date']?.toString() ?? '') ?? now;
+        final bd = DateTime.tryParse(b['meeting_date']?.toString() ?? '') ?? now;
+        return ad.compareTo(bd);
+      });
+      // legacy meetings list no longer used
+
+      // Recent
+      tasks.sort((a, b) => (DateTime.tryParse((b['updated_at'] ?? b['created_at'])?.toString() ?? '') ?? now)
+          .compareTo(DateTime.tryParse((a['updated_at'] ?? a['created_at'])?.toString() ?? '') ?? now));
+      tickets.sort((a, b) => (DateTime.tryParse((b['updated_at'] ?? b['created_at'])?.toString() ?? '') ?? now)
+          .compareTo(DateTime.tryParse((a['updated_at'] ?? a['created_at'])?.toString() ?? '') ?? now));
+      _recentTasks = tasks.take(3).toList();
+      _recentTickets = tickets.take(3).toList();
+
+      // Build unified upcoming list: meetings (next 14d), tasks due today, tickets created today (approx due)
+      final List<Map<String, dynamic>> items = [];
+      for (final m in meetings) {
+        final dt = DateTime.tryParse(m['meeting_date']?.toString() ?? '');
+        if (dt != null && dt.isAfter(now.subtract(const Duration(days: 1))) && dt.isBefore(now.add(const Duration(days: 14)))) {
+          items.add({
+            'type': 'meeting',
+            'id': m['id'],
+            'title': m['title'] ?? 'Meeting',
+            'at': dt,
+            'icon': Icons.groups,
+            'color': Colors.blue.shade400,
+          });
+        }
+      }
+      for (final t in tasks) {
+        if (t['status'] == 'completed') continue;
+        final due = DateTime.tryParse(t['due_date']?.toString() ?? '');
+        if (due != null) {
+          final sameDay = due.year == now.year && due.month == now.month && due.day == now.day;
+          if (sameDay) {
+            items.add({
+              'type': 'task',
+              'id': t['id'],
+              'title': t['title'] ?? 'Task',
+              'at': due,
+              'icon': Icons.task_alt,
+              'color': Colors.green.shade400,
+              'status': t['status'],
+            });
+          }
+        }
+      }
+      for (final tk in tickets) {
+        // Tickets don't have due_date in schema; approximate with created today and open/in_progress
+        final created = DateTime.tryParse(tk['created_at']?.toString() ?? '');
+        final isActionable = tk['status'] == 'open' || tk['status'] == 'in_progress';
+        if (created != null && isActionable) {
+          final sameDay = created.year == now.year && created.month == now.month && created.day == now.day;
+          if (sameDay) {
+            items.add({
+              'type': 'ticket',
+              'id': tk['id'],
+              'title': tk['title'] ?? 'Ticket',
+              'at': created,
+              'icon': Icons.confirmation_number,
+              'color': Colors.orange.shade400,
+              'status': tk['status'],
+            });
+          }
+        }
+      }
+      items.sort((a, b) => (a['at'] as DateTime).compareTo(b['at'] as DateTime));
+      _upcomingItems = items.take(8).toList();
+
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   Future<void> _onRefresh() async {
@@ -224,7 +523,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           SliverAppBar(
             backgroundColor: Colors.transparent,
             elevation: 0,
-            expandedHeight: 150,
+            expandedHeight: 160,
             pinned: true,
             flexibleSpace: FlexibleSpaceBar(
               background: Stack(
@@ -249,16 +548,17 @@ class _DashboardScreenState extends State<DashboardScreen>
                     painter: DotPatternPainter(
                       color: Colors.white.withOpacity(0.1),
                     ),
-                    size: Size(MediaQuery.of(context).size.width, 150),
+                    size: Size(MediaQuery.of(context).size.width, 160),
                   ),
                   SafeArea(
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
+                      padding: const EdgeInsets.fromLTRB(24, 16, 24, 20),
                       child: Column(
-                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.center,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
                               Container(
                                 width: 48,
@@ -293,12 +593,17 @@ class _DashboardScreenState extends State<DashboardScreen>
                                     const SizedBox(height: 4),
                                     Row(
                                       children: [
-                                        Text(
-                                          _userName ?? '—',
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 24,
-                                            fontWeight: FontWeight.bold,
+
+                                        Flexible(
+                                          child: Text(
+                                            _userName ?? '—',
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 24,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+
                                           ),
                                         ),
                                         const SizedBox(width: 8),
@@ -338,6 +643,31 @@ class _DashboardScreenState extends State<DashboardScreen>
                                         ),
                                       ],
                                     ),
+                                    if (_userTeams.length > 1)
+                                      GestureDetector(
+                                        onTap: _showTeamSwitcher,
+                                        child: Padding(
+                                          padding: const EdgeInsets.only(top: 4),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Text(
+                                                _currentTeamName ?? 'My Team',
+                                                style: TextStyle(
+                                                  color: Colors.white.withOpacity(0.9),
+                                                  fontSize: 14,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Icon(
+                                                Icons.swap_horiz,
+                                                color: Colors.white.withOpacity(0.9),
+                                                size: 16,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
                                   ],
                                 ),
                               ),
@@ -532,23 +862,27 @@ class _DashboardScreenState extends State<DashboardScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Task Completion (Last 7 days)',
+
+                'Task Completion by Day',
+
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
                 ),
               ),
+              const SizedBox(height: 10),
               Container(
                 decoration: BoxDecoration(
                   color: Colors.grey.shade800,
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     _timeRangeButton('Week', 0),
                     _timeRangeButton('Month', 1),
@@ -568,9 +902,20 @@ class _DashboardScreenState extends State<DashboardScreen>
                       style: TextStyle(color: Colors.grey.shade500),
                     ),
                   )
-                : LineChart(
-                    LineChartData(
-                      gridData: FlGridData(show: false),
+                : BarChart(
+                    BarChartData(
+                      gridData: FlGridData(
+                        show: true,
+                        drawVerticalLine: false,
+                        horizontalInterval: 1,
+                        getDrawingHorizontalLine: (value) {
+                          return FlLine(
+                            color: Colors.grey.shade800,
+                            strokeWidth: 1,
+                          );
+                        },
+                      ),
+
                       titlesData: FlTitlesData(
                         leftTitles: AxisTitles(
                           sideTitles: SideTitles(
@@ -614,19 +959,26 @@ class _DashboardScreenState extends State<DashboardScreen>
                         ),
                       ),
                       borderData: FlBorderData(show: false),
-                      lineBarsData: [
-                        LineChartBarData(
-                          spots: _taskCompletionSpots,
-                          isCurved: true,
-                          color: Colors.green.shade400,
-                          barWidth: 3,
-                          dotData: FlDotData(show: false),
-                          belowBarData: BarAreaData(
-                            show: true,
-                            color: Colors.green.shade400.withOpacity(0.1),
-                          ),
-                        ),
-                      ],
+
+                      barGroups: _taskCompletionSpots.map((spot) {
+                        return BarChartGroupData(
+                          x: spot.x.toInt(),
+                          barRods: [
+                            BarChartRodData(
+                              toY: spot.y,
+                              color: Colors.green.shade400,
+                              width: 16,
+                              borderRadius: BorderRadius.circular(4),
+                              backDrawRodData: BackgroundBarChartRodData(
+                                show: true,
+                                toY: 5, // Maximum expected value or slightly higher
+                                color: Colors.green.shade400.withOpacity(0.1),
+                              ),
+                            ),
+                          ],
+                        );
+                      }).toList(),
+
                     ),
                   ),
           ),

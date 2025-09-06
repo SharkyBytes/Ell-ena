@@ -103,6 +103,129 @@ class SupabaseService {
     }
   }
   
+  // Get all teams associated with the user's email
+  Future<Map<String, dynamic>> getUserTeams(String email) async {
+    try {
+      if (!_isInitialized) {
+        return {
+          'success': false,
+          'error': 'Supabase is not initialized',
+        };
+      }
+      
+      // Get teams where the user is a member
+      final response = await _client
+          .from('users')
+          .select('team_id, teams(*)')
+          .eq('email', email);
+      
+      if (response.isEmpty) {
+        return {
+          'success': true,
+          'teams': [],
+        };
+      }
+      
+      // Transform the response into a list of team objects
+      final List<Map<String, dynamic>> teams = [];
+      for (var record in response) {
+        if (record['teams'] != null) {
+          teams.add({
+            'id': record['team_id'],
+            'name': record['teams']['name'],
+            'team_code': record['teams']['team_code'],
+          });
+        }
+      }
+      
+      return {
+        'success': true,
+        'teams': teams,
+      };
+    } catch (e) {
+      debugPrint('Error getting user teams: $e');
+      return {
+        'success': false,
+        'error': e.toString(),
+        'teams': [],
+      };
+    }
+  }
+  
+  // Switch the current team
+  Future<Map<String, dynamic>> switchTeam(String teamId) async {
+    try {
+      if (!_isInitialized) {
+        return {
+          'success': false,
+          'error': 'Supabase is not initialized',
+        };
+      }
+      
+      final user = _client.auth.currentUser;
+      if (user == null) {
+        return {
+          'success': false,
+          'error': 'User not authenticated',
+        };
+      }
+      
+      // Check if the user is a member of this team
+      final checkResponse = await _client
+          .from('users')
+          .select('id, team_id')
+          .eq('id', user.id)
+          .eq('team_id', teamId)
+          .limit(1);
+      
+      if (checkResponse.isEmpty) {
+        return {
+          'success': false,
+          'error': 'User is not a member of this team',
+        };
+      }
+      
+      // Get the team details
+      final teamResponse = await _client
+          .from('teams')
+          .select('*')
+          .eq('id', teamId)
+          .limit(1);
+      
+      if (teamResponse.isEmpty) {
+        return {
+          'success': false,
+          'error': 'Team not found',
+        };
+      }
+      
+      // Update the cached profile
+      if (_userProfileCache != null) {
+        _userProfileCache!['team_id'] = teamId;
+        _userProfileCache!['teams'] = teamResponse[0];
+        await _saveUserProfileToCache(_userProfileCache!);
+      }
+      
+      // Reset the team members cache
+      _teamMembersCache = [];
+      _currentTeamId = teamId;
+      
+      // Load team members for the new team
+      await loadTeamMembers(teamId);
+      
+      return {
+        'success': true,
+        'team': teamResponse[0],
+      };
+    } catch (e) {
+      debugPrint('Error switching team: $e');
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
+    }
+  }
+  
   // Load team members if user is logged in
   Future<void> _loadTeamMembersIfLoggedIn() async {
     try {

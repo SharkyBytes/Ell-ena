@@ -54,6 +54,12 @@ dependencies:
   
   # HTTP requests
   http: ^1.2.1
+
+  pdf: ^3.11.3
+  path_provider: ^2.1.4
+  printing: ^5.13.1
+  permission_handler: ^11.3.1
+
   speech_to_text: ^7.3.0
 
 dev_dependencies:

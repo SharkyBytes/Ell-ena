@@ -16,6 +16,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _supabaseService = SupabaseService();
   bool _isLoading = true;
   Map<String, dynamic>? _userProfile;
+  List<Map<String, dynamic>> _userTeams = [];
 
   @override
   void initState() {
@@ -30,6 +31,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     try {
       final profile = await _supabaseService.getCurrentUserProfile();
+      
+      // Also load all teams associated with the user's email
+      if (profile != null && profile['email'] != null) {
+        try {
+          final teamsResponse = await _supabaseService.getUserTeams(profile['email']);
+          if (teamsResponse['success'] == true && teamsResponse['teams'] != null) {
+            _userTeams = List<Map<String, dynamic>>.from(teamsResponse['teams']);
+          }
+        } catch (e) {
+          debugPrint('Error fetching user teams: $e');
+        }
+      }
 
       if (mounted) {
         setState(() {
@@ -224,6 +237,133 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ],
       ),
     );
+  }
+  
+  void _showTeamSwitcher() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF2D2D2D),
+          title: const Text(
+            'Switch Team',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: _userTeams.length,
+              itemBuilder: (context, index) {
+                final team = _userTeams[index];
+                final isCurrentTeam = team['id'] == _userProfile?['team_id'];
+                
+                return ListTile(
+                  title: Text(
+                    team['name'] ?? 'Team',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: isCurrentTeam ? FontWeight.bold : FontWeight.normal,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'Team Code: ${team['team_code'] ?? 'N/A'}',
+                    style: TextStyle(
+                      color: Colors.grey.shade400,
+                      fontSize: 12,
+                    ),
+                  ),
+                  leading: CircleAvatar(
+                    backgroundColor: isCurrentTeam 
+                        ? Colors.green.shade400 
+                        : Colors.grey.shade700,
+                    child: Text(
+                      (team['name'] as String? ?? 'T')[0].toUpperCase(),
+                      style: const TextStyle(color: Colors.white),
+                    ),
+                  ),
+                  trailing: isCurrentTeam 
+                      ? Icon(Icons.check, color: Colors.green.shade400)
+                      : null,
+                  onTap: () {
+                    if (!isCurrentTeam) {
+                      _switchTeam(team['id']);
+                    }
+                    Navigator.pop(context);
+                  },
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+              },
+              child: Text(
+                'Cancel',
+                style: TextStyle(color: Colors.grey.shade400),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+  
+  Future<void> _switchTeam(String teamId) async {
+    try {
+      setState(() {
+        _isLoading = true;
+      });
+      
+      final result = await _supabaseService.switchTeam(teamId);
+      
+      if (result['success'] == true) {
+        // Reload profile with new team
+        await _loadUserProfile();
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Team switched successfully'),
+              backgroundColor: Colors.green.shade600,
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error switching team: ${result['error']}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Error switching team: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error switching team: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   Widget _buildLogoutButton() {
@@ -483,6 +623,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 subtitle: 'Configure security settings',
                 iconColor: Colors.green.shade400,
               ),
+              // Team Switcher option for users with multiple teams
+              if (_userTeams.length > 1) ...[
+                const Divider(color: Colors.grey),
+                _buildSettingItem(
+                  icon: Icons.swap_horiz,
+                  title: 'Switch Team',
+                  subtitle: 'Change to another team',
+                  iconColor: Colors.purple.shade400,
+                  onTap: _showTeamSwitcher,
+                ),
+              ],
               // Only show Team Members option for admin users
               if (isAdmin && teamId.isNotEmpty) ...[
                 const Divider(color: Colors.grey),
