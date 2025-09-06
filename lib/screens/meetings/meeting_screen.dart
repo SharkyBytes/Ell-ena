@@ -5,6 +5,7 @@ import '../../services/supabase_service.dart';
 import '../../widgets/custom_widgets.dart';
 import 'create_meeting_screen.dart';
 import 'meeting_detail_screen.dart';
+import 'meeting_insights_screen.dart';
 
 class MeetingScreen extends StatefulWidget {
   static final GlobalKey<_MeetingScreenState> globalKey = GlobalKey<_MeetingScreenState>();
@@ -566,7 +567,15 @@ class _MeetingCard extends StatelessWidget {
                           Expanded(
                             child: OutlinedButton.icon(
                               onPressed: () {
-                                // Would navigate to transcription in a real app
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => MeetingInsightsScreen(
+                                      meetingId: meeting['id'],
+                                      initialTab: 'transcript',
+                                    ),
+                                  ),
+                                );
                               },
                               icon: Icon(
                                 Icons.description,
@@ -593,7 +602,15 @@ class _MeetingCard extends StatelessWidget {
                           Expanded(
                             child: OutlinedButton.icon(
                               onPressed: () {
-                                // Would navigate to AI summary in a real app
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => MeetingInsightsScreen(
+                                      meetingId: meeting['id'],
+                                      initialTab: 'summary',
+                                    ),
+                                  ),
+                                );
                               },
                               icon: Icon(
                                 Icons.auto_awesome,

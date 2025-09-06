@@ -3,6 +3,9 @@ import '../../widgets/custom_widgets.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import '../../services/supabase_service.dart';
+import '../tasks/task_detail_screen.dart';
+import '../tickets/ticket_detail_screen.dart';
+import '../meetings/meeting_detail_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -23,10 +26,11 @@ class _DashboardScreenState extends State<DashboardScreen>
   int _ticketsOpen = 0;
   int _ticketsInProgress = 0;
   int _ticketsResolved = 0;
-  List<Map<String, dynamic>> _upcomingMeetings = [];
+  // Deprecated: using unified _upcomingItems now
   List<Map<String, dynamic>> _recentTasks = [];
   List<Map<String, dynamic>> _recentTickets = [];
   List<FlSpot> _taskCompletionSpots = [];
+  List<Map<String, dynamic>> _upcomingItems = [];
 
   @override
   void initState() {
@@ -121,7 +125,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         final bd = DateTime.tryParse(b['meeting_date']?.toString() ?? '') ?? now;
         return ad.compareTo(bd);
       });
-      _upcomingMeetings = upcoming.take(5).toList();
+      // legacy meetings list no longer used
 
       // Recent
       tasks.sort((a, b) => (DateTime.tryParse((b['updated_at'] ?? b['created_at'])?.toString() ?? '') ?? now)
@@ -130,6 +134,61 @@ class _DashboardScreenState extends State<DashboardScreen>
           .compareTo(DateTime.tryParse((a['updated_at'] ?? a['created_at'])?.toString() ?? '') ?? now));
       _recentTasks = tasks.take(3).toList();
       _recentTickets = tickets.take(3).toList();
+
+      // Build unified upcoming list: meetings (next 14d), tasks due today, tickets created today (approx due)
+      final List<Map<String, dynamic>> items = [];
+      for (final m in meetings) {
+        final dt = DateTime.tryParse(m['meeting_date']?.toString() ?? '');
+        if (dt != null && dt.isAfter(now.subtract(const Duration(days: 1))) && dt.isBefore(now.add(const Duration(days: 14)))) {
+          items.add({
+            'type': 'meeting',
+            'id': m['id'],
+            'title': m['title'] ?? 'Meeting',
+            'at': dt,
+            'icon': Icons.groups,
+            'color': Colors.blue.shade400,
+          });
+        }
+      }
+      for (final t in tasks) {
+        if (t['status'] == 'completed') continue;
+        final due = DateTime.tryParse(t['due_date']?.toString() ?? '');
+        if (due != null) {
+          final sameDay = due.year == now.year && due.month == now.month && due.day == now.day;
+          if (sameDay) {
+            items.add({
+              'type': 'task',
+              'id': t['id'],
+              'title': t['title'] ?? 'Task',
+              'at': due,
+              'icon': Icons.task_alt,
+              'color': Colors.green.shade400,
+              'status': t['status'],
+            });
+          }
+        }
+      }
+      for (final tk in tickets) {
+        // Tickets don't have due_date in schema; approximate with created today and open/in_progress
+        final created = DateTime.tryParse(tk['created_at']?.toString() ?? '');
+        final isActionable = tk['status'] == 'open' || tk['status'] == 'in_progress';
+        if (created != null && isActionable) {
+          final sameDay = created.year == now.year && created.month == now.month && created.day == now.day;
+          if (sameDay) {
+            items.add({
+              'type': 'ticket',
+              'id': tk['id'],
+              'title': tk['title'] ?? 'Ticket',
+              'at': created,
+              'icon': Icons.confirmation_number,
+              'color': Colors.orange.shade400,
+              'status': tk['status'],
+            });
+          }
+        }
+      }
+      items.sort((a, b) => (a['at'] as DateTime).compareTo(b['at'] as DateTime));
+      _upcomingItems = items.take(8).toList();
 
       if (mounted) {
         setState(() {
@@ -617,32 +676,36 @@ class _DashboardScreenState extends State<DashboardScreen>
             color: const Color(0xFF2D2D2D),
             borderRadius: BorderRadius.circular(20),
           ),
-          child: _upcomingMeetings.isEmpty
+          child: _upcomingItems.isEmpty
               ? Center(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     child: Text(
-                      'No upcoming meetings',
+                      'Nothing due today or scheduled soon',
                       style: TextStyle(color: Colors.grey.shade400),
                     ),
                   ),
                 )
               : Column(
-                  children: List.generate(_upcomingMeetings.length, (index) {
-                    final m = _upcomingMeetings[index];
-                    final dt = DateTime.tryParse(m['meeting_date']?.toString() ?? '');
+                  children: List.generate(_upcomingItems.length, (index) {
+                    final item = _upcomingItems[index];
+                    final dt = item['at'] as DateTime?;
                     final timeLabel = dt != null ? DateFormat('MMM d • h:mm a').format(dt) : '';
-                    final color = Colors.blue.shade400;
-                    return Column(
-                      children: [
-                        _buildUpcomingItem(
-                          (m['title'] as String?) ?? 'Meeting',
-                          timeLabel,
-                          Icons.groups,
-                          color,
-                        ),
-                        if (index < _upcomingMeetings.length - 1) const Divider(color: Colors.grey),
-                      ],
+                    final IconData icon = item['icon'] as IconData;
+                    final Color color = item['color'] as Color;
+                    return InkWell(
+                      onTap: () => _openUpcomingItem(item),
+                      child: Column(
+                        children: [
+                          _buildUpcomingItem(
+                            (item['title'] as String?) ?? '',
+                            timeLabel,
+                            icon,
+                            color,
+                          ),
+                          if (index < _upcomingItems.length - 1) const Divider(color: Colors.grey),
+                        ],
+                      ),
                     );
                   }),
                 ),
@@ -693,6 +756,28 @@ class _DashboardScreenState extends State<DashboardScreen>
         ],
       ),
     );
+  }
+
+  void _openUpcomingItem(Map<String, dynamic> item) {
+    final type = item['type'] as String?;
+    final id = item['id'] as String?;
+    if (type == null || id == null) return;
+    if (type == 'task') {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => TaskDetailScreen(taskId: id)),
+      );
+    } else if (type == 'ticket') {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => TicketDetailScreen(ticketId: id)),
+      );
+    } else if (type == 'meeting') {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => MeetingDetailScreen(meetingId: id)),
+      );
+    }
   }
 
   Widget _buildRecentActivity() {
