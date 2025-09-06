@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 import '../../widgets/custom_widgets.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -1183,3 +1184,4 @@ class DotPatternPainter extends CustomPainter {
   @override
   bool shouldRepaint(DotPatternPainter oldDelegate) => false;
 }
+
