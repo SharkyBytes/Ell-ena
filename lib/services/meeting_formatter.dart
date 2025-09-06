@@ -19,7 +19,7 @@ class MeetingFormatter {
       if (summary['key_discussion_points'] != null) {
         buffer.writeln('Key Points:');
         for (var point in summary['key_discussion_points']) {
-          buffer.writeln('• $point');
+          buffer.writeln('-> $point');
         }
         buffer.writeln('');
       }
@@ -28,7 +28,7 @@ class MeetingFormatter {
       if (summary['important_decisions'] != null) {
         buffer.writeln('Decisions:');
         for (var decision in summary['important_decisions']) {
-          buffer.writeln('• $decision');
+          buffer.writeln('-> $decision');
         }
         buffer.writeln('');
       }
@@ -40,7 +40,7 @@ class MeetingFormatter {
           final task = item['item'] ?? 'No description';
           final owner = item['owner'] ?? 'Unassigned';
           final deadline = item['deadline'] ?? 'No deadline';
-          buffer.writeln('• $task (Owner: $owner, Deadline: $deadline)');
+          buffer.writeln('-> $task (Owner: $owner, Deadline: $deadline)');
         }
         buffer.writeln('');
       }
@@ -49,7 +49,7 @@ class MeetingFormatter {
       if (summary['follow_up_tasks'] != null && summary['follow_up_tasks'].isNotEmpty) {
         buffer.writeln('Follow-Up Tasks:');
         for (var task in summary['follow_up_tasks']) {
-          buffer.writeln('• $task');
+          buffer.writeln('-> $task');
         }
         buffer.writeln('');
       }

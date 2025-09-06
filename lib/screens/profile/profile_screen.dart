@@ -281,8 +281,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     backgroundColor: isCurrentTeam 
                         ? Colors.green.shade400 
                         : Colors.grey.shade700,
-                    child: Text(
-                      (team['name'] as String? ?? 'T')[0].toUpperCase(),
+                     child: Text(
+                      (() {
+                        final n = (team['name'] as String?)?.trim();
+                        return (n != null && n.isNotEmpty ? n[0] : 'T').toUpperCase();
+                      })(),
                       style: const TextStyle(color: Colors.white),
                     ),
                   ),

@@ -102,10 +102,21 @@ serve(async (req) => {
     // Update meeting record
     console.log("Updating meeting record in database");
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-    await supabase
-      .from('meetings')
-      .update({ bot_started_at: new Date().toISOString() })
-      .eq('id', meeting_id);
+    const { error: updateError } = await supabase
+    .from('meetings')
+    .update({ bot_started_at: new Date().toISOString() })
+    .eq('id', meeting_id);
+
+    if (updateError) {
+      console.error("Failed to update meeting record:", updateError);
+      return new Response(
+        JSON.stringify({ 
+          error: "Bot started but failed to update meeting record",
+          details: updateError.message 
+        }),
+        { status: 500, headers: { "Content-Type": "application/json" } }
+      );
+    }
     
     console.log("Meeting record updated successfully");
     
@@ -115,7 +126,7 @@ serve(async (req) => {
   } catch (error) {
     console.error("Error in start-bot function:", error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
       { status: 500, headers: { "Content-Type": "application/json" } }
     );
   }

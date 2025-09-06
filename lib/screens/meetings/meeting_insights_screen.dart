@@ -1,12 +1,11 @@
+
 import 'package:flutter/material.dart';
 import '../../services/supabase_service.dart';
-
 import 'package:pdf/widgets.dart' as pw;
 import 'package:pdf/pdf.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/foundation.dart';
-
 
 class MeetingInsightsScreen extends StatefulWidget {
   final String meetingId;
@@ -24,12 +23,18 @@ class _MeetingInsightsScreenState extends State<MeetingInsightsScreen> with Sing
   Map<String, dynamic>? _meeting; // includes final_transcription and meeting_summary_json
   late TabController _tabController;
 
-  @override
+ @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this, initialIndex: widget.initialTab == 'summary' ? 1 : 0);
     _load();
   }
+
+@override
+void dispose() {
+  _tabController.dispose();
+  super.dispose();
+}
 
   Future<void> _load() async {
     setState(() => _isLoading = true);
@@ -65,7 +70,6 @@ class _MeetingInsightsScreenState extends State<MeetingInsightsScreen> with Sing
             Tab(text: 'AI Summary'),
           ],
         ),
-
         actions: [
           IconButton(
             tooltip: 'Download PDF',
@@ -73,7 +77,6 @@ class _MeetingInsightsScreenState extends State<MeetingInsightsScreen> with Sing
             onPressed: _downloadCurrentTabAsPdf,
           )
         ],
-
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -86,7 +89,6 @@ class _MeetingInsightsScreenState extends State<MeetingInsightsScreen> with Sing
             ),
     );
   }
-
 
   Future<void> _downloadCurrentTabAsPdf() async {
     try {

@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 import '../../widgets/custom_widgets.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -20,11 +21,9 @@ class _DashboardScreenState extends State<DashboardScreen>
   int _selectedTimeRange = 0; // 0: Week, 1: Month
   bool _isLoading = true;
   String? _userName;
-
   String? _currentTeamId;
   String? _currentTeamName;
   List<Map<String, dynamic>> _userTeams = [];
-
   int _tasksTotal = 0;
   int _tasksInProgress = 0;
   int _tasksCompleted = 0;
@@ -45,7 +44,6 @@ class _DashboardScreenState extends State<DashboardScreen>
       vsync: this,
     )..repeat();
     _loadData();
-
   }
 
   @override
@@ -171,7 +169,6 @@ class _DashboardScreenState extends State<DashboardScreen>
         );
       }
     }
-
   }
 
   Future<void> _loadData() async {
@@ -221,162 +218,6 @@ class _DashboardScreenState extends State<DashboardScreen>
       final tasks = List<Map<String, dynamic>>.from(results[0] as List);
       final tickets = List<Map<String, dynamic>>.from(results[1] as List);
       final meetings = List<Map<String, dynamic>>.from(results[2] as List);
-
-      _tasksTotal = tasks.length;
-      _tasksInProgress = tasks.where((t) => t['status'] == 'in_progress').length;
-      _tasksCompleted = tasks.where((t) => t['status'] == 'completed').length;
-
-      // Build completion series for last 7 days
-      final now = DateTime.now();
-      final Map<int, int> dayIndexToCompleted = {for (var i = 0; i < 7; i++) i: 0};
-      for (final t in tasks) {
-        if (t['status'] == 'completed') {
-          final ts = (t['updated_at'] ?? t['created_at'])?.toString();
-          if (ts != null) {
-            final updated = DateTime.tryParse(ts);
-            if (updated != null) {
-              final diffDays = now
-                  .difference(DateTime(updated.year, updated.month, updated.day))
-                  .inDays;
-              if (diffDays >= 0 && diffDays < 7) {
-                final idx = 6 - diffDays; // earlier days on the left
-                dayIndexToCompleted[idx] = (dayIndexToCompleted[idx] ?? 0) + 1;
-              }
-            }
-          }
-        }
-      }
-      _taskCompletionSpots = List.generate(
-        7,
-        (i) => FlSpot(i.toDouble(), (dayIndexToCompleted[i] ?? 0).toDouble()),
-      );
-
-      _ticketsOpen = tickets.where((t) => t['status'] == 'open').length;
-      _ticketsInProgress = tickets.where((t) => t['status'] == 'in_progress').length;
-      _ticketsResolved = tickets.where((t) => t['status'] == 'resolved').length;
-
-      // Upcoming meetings (next 14 days)
-      final upcoming = <Map<String, dynamic>>[];
-      for (final m in meetings) {
-        final md = DateTime.tryParse(m['meeting_date']?.toString() ?? '');
-        if (md != null && md.isAfter(now.subtract(const Duration(days: 1))) && md.isBefore(now.add(const Duration(days: 14)))) {
-          upcoming.add(m);
-        }
-      }
-      upcoming.sort((a, b) {
-        final ad = DateTime.tryParse(a['meeting_date']?.toString() ?? '') ?? now;
-        final bd = DateTime.tryParse(b['meeting_date']?.toString() ?? '') ?? now;
-        return ad.compareTo(bd);
-      });
-      // legacy meetings list no longer used
-
-      // Recent
-      tasks.sort((a, b) => (DateTime.tryParse((b['updated_at'] ?? b['created_at'])?.toString() ?? '') ?? now)
-          .compareTo(DateTime.tryParse((a['updated_at'] ?? a['created_at'])?.toString() ?? '') ?? now));
-      tickets.sort((a, b) => (DateTime.tryParse((b['updated_at'] ?? b['created_at'])?.toString() ?? '') ?? now)
-          .compareTo(DateTime.tryParse((a['updated_at'] ?? a['created_at'])?.toString() ?? '') ?? now));
-      _recentTasks = tasks.take(3).toList();
-      _recentTickets = tickets.take(3).toList();
-
-      // Build unified upcoming list: meetings (next 14d), tasks due today, tickets created today (approx due)
-      final List<Map<String, dynamic>> items = [];
-      for (final m in meetings) {
-        final dt = DateTime.tryParse(m['meeting_date']?.toString() ?? '');
-        if (dt != null && dt.isAfter(now.subtract(const Duration(days: 1))) && dt.isBefore(now.add(const Duration(days: 14)))) {
-          items.add({
-            'type': 'meeting',
-            'id': m['id'],
-            'title': m['title'] ?? 'Meeting',
-            'at': dt,
-            'icon': Icons.groups,
-            'color': Colors.blue.shade400,
-          });
-        }
-      }
-      for (final t in tasks) {
-        if (t['status'] == 'completed') continue;
-        final due = DateTime.tryParse(t['due_date']?.toString() ?? '');
-        if (due != null) {
-          final sameDay = due.year == now.year && due.month == now.month && due.day == now.day;
-          if (sameDay) {
-            items.add({
-              'type': 'task',
-              'id': t['id'],
-              'title': t['title'] ?? 'Task',
-              'at': due,
-              'icon': Icons.task_alt,
-              'color': Colors.green.shade400,
-              'status': t['status'],
-            });
-          }
-        }
-      }
-      for (final tk in tickets) {
-        // Tickets don't have due_date in schema; approximate with created today and open/in_progress
-        final created = DateTime.tryParse(tk['created_at']?.toString() ?? '');
-        final isActionable = tk['status'] == 'open' || tk['status'] == 'in_progress';
-        if (created != null && isActionable) {
-          final sameDay = created.year == now.year && created.month == now.month && created.day == now.day;
-          if (sameDay) {
-            items.add({
-              'type': 'ticket',
-              'id': tk['id'],
-              'title': tk['title'] ?? 'Ticket',
-              'at': created,
-              'icon': Icons.confirmation_number,
-              'color': Colors.orange.shade400,
-              'status': tk['status'],
-            });
-          }
-        }
-      }
-      items.sort((a, b) => (a['at'] as DateTime).compareTo(b['at'] as DateTime));
-      _upcomingItems = items.take(8).toList();
-
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _onRefresh() async {
-    await _loadData();
-  }
-
-  Future<void> _loadData() async {
-    try {
-      setState(() {
-        _isLoading = true;
-      });
-
-      final supa = SupabaseService();
-
-      final profileFuture = supa.getCurrentUserProfile(forceRefresh: true);
-      final tasksFuture = supa.getTasks();
-      final ticketsFuture = supa.getTickets();
-      final meetingsFuture = supa.getMeetings();
-
-      final results = await Future.wait([
-        profileFuture,
-        tasksFuture,
-        ticketsFuture,
-        meetingsFuture,
-      ]);
-
-      final profile = results[0] as Map<String, dynamic>?;
-      final tasks = List<Map<String, dynamic>>.from(results[1] as List);
-      final tickets = List<Map<String, dynamic>>.from(results[2] as List);
-      final meetings = List<Map<String, dynamic>>.from(results[3] as List);
-
-      _userName = (profile?['full_name'] as String?)?.trim();
 
       _tasksTotal = tasks.length;
       _tasksInProgress = tasks.where((t) => t['status'] == 'in_progress').length;
@@ -594,7 +435,6 @@ class _DashboardScreenState extends State<DashboardScreen>
                                     const SizedBox(height: 2),
                                     Row(
                                       children: [
-
                                         Flexible(
                                           child: Text(
                                             _userName ?? '—',
@@ -604,7 +444,6 @@ class _DashboardScreenState extends State<DashboardScreen>
                                               fontWeight: FontWeight.bold,
                                             ),
                                             overflow: TextOverflow.ellipsis,
-
                                           ),
                                         ),
                                         const SizedBox(width: 8),
@@ -866,9 +705,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-
                 'Task Completion by Day',
-
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 18,
@@ -916,7 +753,6 @@ class _DashboardScreenState extends State<DashboardScreen>
                           );
                         },
                       ),
-
                       titlesData: FlTitlesData(
                         leftTitles: AxisTitles(
                           sideTitles: SideTitles(
@@ -960,7 +796,6 @@ class _DashboardScreenState extends State<DashboardScreen>
                         ),
                       ),
                       borderData: FlBorderData(show: false),
-
                       barGroups: _taskCompletionSpots.map((spot) {
                         return BarChartGroupData(
                           x: spot.x.toInt(),
@@ -979,7 +814,6 @@ class _DashboardScreenState extends State<DashboardScreen>
                           ],
                         );
                       }).toList(),
-
                     ),
                   )
                   // Line Chart for Monthly view
@@ -1350,3 +1184,4 @@ class DotPatternPainter extends CustomPainter {
   @override
   bool shouldRepaint(DotPatternPainter oldDelegate) => false;
 }
+

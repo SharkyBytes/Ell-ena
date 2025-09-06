@@ -96,7 +96,7 @@ CREATE OR REPLACE FUNCTION delete_old_meetings()
 RETURNS void AS $$
 BEGIN
     DELETE FROM meetings
-    WHERE meeting_expires_at < NOW() - INTERVAL '30 days';
+    WHERE meeting_date < NOW() - INTERVAL '30 days';
 END;
 $$ LANGUAGE plpgsql;
 
