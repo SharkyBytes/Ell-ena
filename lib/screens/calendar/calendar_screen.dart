@@ -12,8 +12,7 @@ import '../../widgets/custom_widgets.dart';
 import '../meetings/meeting_detail_screen.dart';
 import '../tasks/task_detail_screen.dart';
 import '../tickets/ticket_detail_screen.dart';
-import '../home/home_screen.dart';
-import '../chat/chat_screen.dart'; // Added import for ChatScreen
+import '../chat/chat_screen.dart'; 
 
 class CalendarScreen extends StatefulWidget {
   const CalendarScreen({super.key});
@@ -341,27 +340,34 @@ class _CalendarScreenState extends State<CalendarScreen> {
     return _events[normalizedDay] ?? [];
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF1A1A1A),
-      body: _isLoading
-          ? const CalendarLoadingSkeleton()
-          : Column(
-              children: [_buildCalendar(), Expanded(child: _buildTimeScale())],
+@override
+Widget build(BuildContext context) {
+  return Scaffold(
+    backgroundColor: const Color(0xFF1A1A1A),
+    body: _isLoading
+        ? const CalendarLoadingSkeleton()
+        : SafeArea(
+            child: Column(
+              children: [
+                const SizedBox(height: 8),
+                _buildCalendar(),
+                const SizedBox(height: 12),
+                Expanded(child: _buildTimeScale()),
+              ],
             ),
-    );
-  }
+          ),
+  );
+}
 
-  Widget _buildCalendar() {
-    return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF2D2D2D),
-        borderRadius: BorderRadius.only(
-          bottomLeft: Radius.circular(20),
-          bottomRight: Radius.circular(20),
-        ),
-      ),
+Widget _buildCalendar() {
+  return Container(
+    margin: const EdgeInsets.symmetric(horizontal: 8), 
+    decoration: BoxDecoration(
+      color: const Color(0xFF2D2D2D),
+      borderRadius: BorderRadius.circular(20),
+    ),
+    child: Padding(
+      padding: const EdgeInsets.all(8.0),
       child: TableCalendar(
         firstDay: DateTime.utc(2024, 1, 1),
         lastDay: DateTime.utc(2025, 12, 31),
@@ -421,7 +427,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
             color: Colors.greenAccent,
             shape: BoxShape.circle,
           ),
-          markersMaxCount: 0, // Hide default markers
+          markersMaxCount: 0,
           markerDecoration: BoxDecoration(
             color: Colors.green,
             shape: BoxShape.circle,
@@ -443,8 +449,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
           weekendStyle: TextStyle(color: Colors.white70),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildTimeScale() {
     return ListView.builder(
