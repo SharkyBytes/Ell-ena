@@ -142,48 +142,55 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
     });
   }
 
-@override
-Widget build(BuildContext context) {
-  if (_isLoading) {
-    return const Scaffold(
-      backgroundColor: Color(0xFF1A1A1A),
-      body: WorkspaceLoadingSkeleton(),
-    );
-  }
-  
-  return Scaffold(
-    backgroundColor: const Color(0xFF1A1A1A),
-    appBar: PreferredSize(
-      preferredSize: const Size.fromHeight(kToolbarHeight),
-      child: Container(
-        color: const Color(0xFF2D2D2D),
-        child: SafeArea(
-          child: TabBar(
-            controller: _tabController,
-            indicatorColor: Colors.green,
-            labelColor: Colors.green,
-            unselectedLabelColor: Colors.white70,
-            tabs: const [
-              Tab(icon: Icon(Icons.task), text: 'Tasks'),
-              Tab(icon: Icon(Icons.confirmation_number), text: 'Tickets'),
-              Tab(icon: Icon(Icons.group), text: 'Meetings'),
-            ],
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        backgroundColor: Color(0xFF1A1A1A),
+        body: WorkspaceLoadingSkeleton(),
+      );
+    }
+
+    final statusBarHeight = MediaQuery.of(context).padding.top;
+
+    return Scaffold(
+      backgroundColor: const Color(0xFF1A1A1A),
+      appBar: PreferredSize(
+        preferredSize: Size.fromHeight(kToolbarHeight + statusBarHeight),
+        child: Container(
+          color: const Color(0xFF2D2D2D),
+          child: SafeArea(
+            top: true,
+            bottom: false,
+            left: false,
+            right: false,
+            child: TabBar(
+              controller: _tabController,
+              indicatorColor: Colors.green,
+              labelColor: Colors.green,
+              unselectedLabelColor: Colors.white70,
+              tabs: const [
+                Tab(icon: Icon(Icons.task), text: 'Tasks'),
+                Tab(icon: Icon(Icons.confirmation_number), text: 'Tickets'),
+                Tab(icon: Icon(Icons.group), text: 'Meetings'),
+              ],
+            ),
           ),
         ),
       ),
-    ),
-    body: TabBarView(
-      controller: _tabController,
-      children: [
-        TaskScreen(key: TaskScreen.globalKey),
-        TicketScreen(key: TicketScreen.globalKey),
-        MeetingScreen(key: MeetingScreen.globalKey),
-      ],
-    ),
-    floatingActionButton: FloatingActionButton(
-      onPressed: _showCreateDialog,
-      backgroundColor: Colors.green,
-      child: const Icon(Icons.add),
-    ),
-  );
-}}
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          TaskScreen(key: TaskScreen.globalKey),
+          TicketScreen(key: TicketScreen.globalKey),
+          MeetingScreen(key: MeetingScreen.globalKey),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _showCreateDialog,
+        backgroundColor: Colors.green,
+        child: const Icon(Icons.add),
+      ),
+    );
+  }
+}
