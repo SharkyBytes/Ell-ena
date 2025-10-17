@@ -1,3 +1,6 @@
+-- Enable the vector extension if not already enabled
+CREATE EXTENSION IF NOT EXISTS vector;
+
 CREATE OR REPLACE FUNCTION queue_embedding(query_text TEXT)
 RETURNS BIGINT AS $$
 DECLARE
