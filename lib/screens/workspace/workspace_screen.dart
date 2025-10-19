@@ -29,7 +29,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
     _tabController.addListener(_handleTabChange);
-    
+
     // Simulate loading delay
     Future.delayed(const Duration(seconds: 2), () {
       if (mounted) {
@@ -67,9 +67,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
   void _showCreateTaskDialog() {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => const CreateTaskScreen(),
-      ),
+      MaterialPageRoute(builder: (context) => const CreateTaskScreen()),
     ).then((result) async {
       if (result == true) {
         // Reload team members cache first
@@ -78,10 +76,10 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
         if (userProfile != null && userProfile['team_id'] != null) {
           await supabaseService.loadTeamMembers(userProfile['team_id']);
         }
-        
+
         // Force refresh of the task screen
         TaskScreen.refreshTasks();
-        
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Task created successfully'),
@@ -95,9 +93,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
   void _showCreateTicketDialog() {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => const CreateTicketScreen(),
-      ),
+      MaterialPageRoute(builder: (context) => const CreateTicketScreen()),
     ).then((result) async {
       if (result == true) {
         // Reload team members cache first
@@ -106,10 +102,10 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
         if (userProfile != null && userProfile['team_id'] != null) {
           await supabaseService.loadTeamMembers(userProfile['team_id']);
         }
-        
+
         // Force refresh of the ticket screen
         TicketScreen.refreshTickets();
-        
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Ticket created successfully'),
@@ -123,9 +119,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
   void _showCreateMeetingDialog() {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => const CreateMeetingScreen(),
-      ),
+      MaterialPageRoute(builder: (context) => const CreateMeetingScreen()),
     ).then((result) async {
       if (result == true) {
         // Reload team members cache first
@@ -134,10 +128,10 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
         if (userProfile != null && userProfile['team_id'] != null) {
           await supabaseService.loadTeamMembers(userProfile['team_id']);
         }
-        
+
         // Force refresh of the meeting screen
         MeetingScreen.refreshMeetings();
-        
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Meeting created successfully'),
@@ -156,13 +150,20 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
         body: WorkspaceLoadingSkeleton(),
       );
     }
-    
+
+    final statusBarHeight = MediaQuery.of(context).padding.top;
+
     return Scaffold(
       backgroundColor: const Color(0xFF1A1A1A),
-      body: Column(
-        children: [
-          Container(
-            color: const Color(0xFF2D2D2D),
+      appBar: PreferredSize(
+        preferredSize: Size.fromHeight(kToolbarHeight + statusBarHeight),
+        child: Container(
+          color: const Color(0xFF2D2D2D),
+          child: SafeArea(
+            top: true,
+            bottom: false,
+            left: false,
+            right: false,
             child: TabBar(
               controller: _tabController,
               indicatorColor: Colors.green,
@@ -175,16 +176,14 @@ class _WorkspaceScreenState extends State<WorkspaceScreen>
               ],
             ),
           ),
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                TaskScreen(key: TaskScreen.globalKey),
-                TicketScreen(key: TicketScreen.globalKey),
-                MeetingScreen(key: MeetingScreen.globalKey),
-              ],
-            ),
-          ),
+        ),
+      ),
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          TaskScreen(key: TaskScreen.globalKey),
+          TicketScreen(key: TicketScreen.globalKey),
+          MeetingScreen(key: MeetingScreen.globalKey),
         ],
       ),
       floatingActionButton: FloatingActionButton(
