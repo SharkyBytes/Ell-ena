@@ -110,131 +110,134 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFF1A1A1A),
-      body: CustomScrollView(
-        slivers: [
-          SliverAppBar(
-            expandedHeight: 200,
-            pinned: true,
-            backgroundColor: Colors.transparent,
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.logout, color: Colors.white),
-                onPressed: _handleLogout,
-                tooltip: 'Logout',
-              ),
-            ],
-            flexibleSpace: FlexibleSpaceBar(
-              background: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [Colors.green.shade400, Colors.green.shade800],
-                  ),
+      body: SafeArea(
+        child: CustomScrollView(
+          slivers: [
+            SliverAppBar(
+              expandedHeight: 200,
+              pinned: true,
+              backgroundColor: Colors.transparent,
+              automaticallyImplyLeading: false,
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.logout, color: Colors.white),
+                  onPressed: _handleLogout,
+                  tooltip: 'Logout',
                 ),
-                child: Stack(
-                  children: [
-                    // Dot pattern background
-                    CustomPaint(
-                      painter: DotPatternPainter(
-                        color: Colors.white.withOpacity(0.1),
-                      ),
-                      size: MediaQuery.of(context).size,
+              ],
+              flexibleSpace: FlexibleSpaceBar(
+                background: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [Colors.green.shade400, Colors.green.shade800],
                     ),
-                    // Profile content
-                    Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Stack(
-                            alignment: Alignment.bottomRight,
-                            children: [
-                              Container(
-                                width: 100,
-                                height: 100,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: Colors.white,
-                                  border: Border.all(color: Colors.white, width: 3),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withOpacity(0.2),
-                                      blurRadius: 10,
-                                      offset: const Offset(0, 5),
-                                    ),
-                                  ],
-                                ),
-                                child: const Icon(
-                                  Icons.person,
-                                  size: 50,
-                                  color: Color(0xFF1A1A1A),
-                                ),
-                              ),
-                              // Role badge
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: role == 'admin' 
-                                      ? Colors.orange.shade400 
-                                      : Colors.blue.shade400,
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: Colors.white, width: 2),
-                                ),
-                                child: Text(
-                                  role == 'admin' ? 'ADMIN' : 'MEMBER',
-                                  style: const TextStyle(
+                  ),
+                  child: Stack(
+                    children: [
+                      // Dot pattern background
+                      CustomPaint(
+                        painter: DotPatternPainter(
+                          color: Colors.white.withOpacity(0.1),
+                        ),
+                        size: MediaQuery.of(context).size,
+                      ),
+                      // Profile content
+                      Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Stack(
+                              alignment: Alignment.bottomRight,
+                              children: [
+                                Container(
+                                  width: 100,
+                                  height: 100,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
                                     color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 10,
+                                    border: Border.all(color: Colors.white, width: 3),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.2),
+                                        blurRadius: 10,
+                                        offset: const Offset(0, 5),
+                                      ),
+                                    ],
+                                  ),
+                                  child: const Icon(
+                                    Icons.person,
+                                    size: 50,
+                                    color: Color(0xFF1A1A1A),
                                   ),
                                 ),
+                                // Role badge
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: role == 'admin' 
+                                        ? Colors.orange.shade400 
+                                        : Colors.blue.shade400,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: Colors.white, width: 2),
+                                  ),
+                                  child: Text(
+                                    role == 'admin' ? 'ADMIN' : 'MEMBER',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              fullName,
+                              style: const TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
                               ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            fullName,
-                            style: const TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
                             ),
-                          ),
-                          Text(
-                            roleDisplay,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              color: Colors.white70,
+                            Text(
+                              roleDisplay,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                color: Colors.white70,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildTeamInfoSection(teamName, teamCode),
+                    const SizedBox(height: 24),
+                    _buildStatsSection(),
+                    const SizedBox(height: 24),
+                    _buildSettingsSection(),
+                    const SizedBox(height: 24),
+                    _buildPreferencesSection(),
+                    const SizedBox(height: 24),
+                    _buildLogoutButton(),
                   ],
                 ),
               ),
             ),
-          ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildTeamInfoSection(teamName, teamCode),
-                  const SizedBox(height: 24),
-                  _buildStatsSection(),
-                  const SizedBox(height: 24),
-                  _buildSettingsSection(),
-                  const SizedBox(height: 24),
-                  _buildPreferencesSection(),
-                  const SizedBox(height: 24),
-                  _buildLogoutButton(),
-                ],
-              ),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
