@@ -738,6 +738,7 @@ class SupabaseService {
       switch (type) {
         case 'signup':
         case 'signup_create':
+        case 'signup_join': 
           otpType = OtpType.signup;
           break;
         case 'email_change':
