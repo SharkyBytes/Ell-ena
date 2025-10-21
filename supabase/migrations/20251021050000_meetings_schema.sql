@@ -1,6 +1,6 @@
 -- Meetings table
 CREATE TABLE meetings (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     meeting_number TEXT NOT NULL,
     title TEXT NOT NULL,
     description TEXT,

@@ -1,6 +1,6 @@
 -- Create tasks table
 CREATE TABLE tasks (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   title TEXT NOT NULL,
   description TEXT,
   status TEXT NOT NULL CHECK (status IN ('todo', 'in_progress', 'completed')),
@@ -15,7 +15,7 @@ CREATE TABLE tasks (
 
 -- Create task comments table for communication
 CREATE TABLE task_comments (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   task_id UUID REFERENCES tasks(id) ON DELETE CASCADE,
   user_id UUID REFERENCES auth.users(id),
   content TEXT NOT NULL,
