@@ -735,21 +735,31 @@ class SupabaseService {
       }
       
       final OtpType otpType;
-      if (type == 'reset_password') {
-        // For password reset, we need to call resetPasswordForEmail instead of resend
-        await _client.auth.resetPasswordForEmail(email);
-      } else {
-        // For signup and other types, use the resend method
-        otpType = type == 'signup' ? OtpType.signup : OtpType.email;
-        await _client.auth.resend(
-          type: otpType,
-          email: email,
-        );
+      switch (type) {
+        case 'signup':
+        case 'signup_create':
+        case 'signup_join': 
+          otpType = OtpType.signup;
+          break;
+        case 'email_change':
+          otpType = OtpType.emailChange;
+          break;
+        case 'reset_password':
+          await _client.auth.resetPasswordForEmail(email);
+          return {'success': true};
+        default:
+          return {
+            'success': false,
+            'error': 'Invalid OTP type: $type',
+          };
       }
-      
-      return {
-        'success': true,
-      };
+
+      await _client.auth.resend(
+        type: otpType,
+        email: email,
+      );
+
+      return {'success': true};
     } catch (e) {
       debugPrint('Error resending verification email: $e');
       return {
