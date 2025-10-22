@@ -16,10 +16,6 @@ BEFORE INSERT OR UPDATE OF transcription ON meetings
 FOR EACH ROW
 EXECUTE FUNCTION update_final_transcription();
 
-UPDATE meetings
-SET final_transcription = extract_clean_transcription(transcription::jsonb)
-WHERE transcription IS NOT NULL;
-
 
 CREATE OR REPLACE FUNCTION extract_clean_transcription(transcription_data jsonb)
 RETURNS jsonb AS $$
@@ -36,4 +32,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-
+-- This update should be after creating extract_clean_transcription function
+UPDATE meetings
+SET final_transcription = extract_clean_transcription(transcription::jsonb)
+WHERE transcription IS NOT NULL;
