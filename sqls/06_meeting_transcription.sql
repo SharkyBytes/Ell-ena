@@ -65,3 +65,7 @@ $$ LANGUAGE plpgsql;
 -- Scheduled jobs
 SELECT cron.schedule('start-bot', '* * * * *', 'SELECT start_meeting_bot()');
 SELECT cron.schedule('fetch-transcript', '* * * * *', 'SELECT fetch_meeting_transcript()'); 
+
+-- Add transcription_error column for storing transcription failure messages
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS transcription_error TEXT;
+COMMENT ON COLUMN meetings.transcription_error IS 'Stores error messages when transcription processing fails';
