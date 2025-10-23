@@ -74,6 +74,9 @@ serve(async (req) => {
     
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+    // Declare transcript variable in outer scope to access in catch block
+    let transcript: string | null = null;
+
     try {
       // Fetch transcript
       console.log("Fetching transcript from Vexa API");
@@ -88,7 +91,7 @@ serve(async (req) => {
         throw new Error(`Vexa API error: ${transcriptRes.status}`);
       }
       
-      const transcript = await transcriptRes.text();
+      transcript = await transcriptRes.text();
       console.log("Transcript fetched successfully, length:", transcript.length);
 
       // Stop bot
@@ -110,11 +113,12 @@ serve(async (req) => {
 
       // Update meeting record with transcript - WITH PROPER ERROR HANDLING
       console.log("Updating meeting record with transcript");
-      const { data: updateData, error: updateError } = await supabase
+      const { error: updateError } = await supabase
         .from('meetings')
         .update({ 
           transcription: transcript,
-          transcription_attempted_at: new Date().toISOString() 
+          transcription_attempted_at: new Date().toISOString(),
+          transcription_error: null // Clear any previous errors on success
         })
         .eq('id', meeting_id);
       
@@ -136,26 +140,39 @@ serve(async (req) => {
     } catch (error) {
       console.error("Error in transcript process:", error);
       
-      // Only mark as attempted if we haven't already updated transcription_attempted_at
-      // This prevents overwriting a successful transcript with an error timestamp
-      console.log("Marking transcription as attempted (failed)");
+      // Build update payload conditionally to preserve transcript if it exists
+      const updatePayload: any = {
+        transcription_attempted_at: new Date().toISOString(),
+        transcription_error: error.message
+      };
+      
+      // Only include transcript if it was successfully fetched
+      if (transcript) {
+        updatePayload.transcription = transcript;
+        console.log("Preserving fetched transcript despite error");
+      }
+      
+      // Mark as attempted and store error (and transcript if available)
+      console.log("Updating meeting record with error details");
       const { error: attemptError } = await supabase
         .from('meetings')
-        .update({ 
-          transcription_attempted_at: new Date().toISOString(),
-          transcription_error: error.message 
-        })
+        .update(updatePayload)
         .eq('id', meeting_id);
         
       // Log if the attempt marking also fails
       if (attemptError) {
-        console.error("Failed to mark transcription as attempted:", attemptError);
+        console.error("Failed to update meeting record with error:", attemptError);
+      } else {
+        console.log("Meeting record updated with error details");
       }
         
       return new Response(
         JSON.stringify({ 
           error: error.message,
-          details: "Failed to fetch or save transcript" 
+          details: transcript 
+            ? "Transcript was fetched but failed to save properly" 
+            : "Failed to fetch transcript",
+          ...(transcript && { transcript }) // Include transcript in response if available
         }),
         { status: 500, headers: { "Content-Type": "application/json" } }
       );
