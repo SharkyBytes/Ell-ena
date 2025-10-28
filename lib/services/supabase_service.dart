@@ -553,7 +553,7 @@ class SupabaseService {
   Future<Map<String, dynamic>> verifyOTP({
     required String email,
     required String token,
-    required String? type,
+    required String type,
     Map<String, dynamic> userData = const {},
   }) async {
     try {
