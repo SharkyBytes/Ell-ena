@@ -182,20 +182,85 @@ Each script creates specific tables, functions, or sets up row-level security po
 
 ## Setting Up Authentication
 
-Supabase provides built-in authentication. The project uses email-based authentication with magic links.
+Supabase provides built-in authentication. The project uses email-based authentication with OTP (One-Time Password) codes.
 
-### 1. Configure Email Provider
+### 1. Configure Email Authentication Provider
 
-1. Go to Authentication > Providers > Email in your Supabase dashboard.
-2. Enable "Email confirmations" and "Secure email change".
-3. Customize the email templates if desired.
+1. Open your Supabase Dashboard → **Authentication** → **Providers** → **Email**
+2. Ensure the following options are enabled:
+   * ✅ Enable Email Signups
+   * ✅ Enable Email Confirmations
+   * ✅ Secure Email Change
+### 2. Configure OTP Email Template
 
-### 2. Configure Additional Settings
+1. Go to **Authentication** → **Emails** in your Supabase project.
+2. Under the **Magic Link** and **Confirm Signup** section, click **Edit Template**.
+3. Replace the default content with the following HTML:
+```html
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Your Verification Code</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        background-color: #f4f6f8;
+        margin: 0;
+        padding: 40px;
+      }
+      .container {
+        max-width: 480px;
+        margin: auto;
+        background-color: #ffffff;
+        padding: 30px;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        text-align: center;
+      }
+      .otp {
+        font-size: 36px;
+        font-weight: bold;
+        letter-spacing: 8px;
+        margin: 20px 0;
+        color: #57ad03;
+      }
+      .message {
+        font-size: 16px;
+        color: #333333;
+      }
+      .footer {
+        margin-top: 40px;
+        font-size: 12px;
+        color: #888888;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h2>Verify Your Email</h2>
+      <p class="message">
+        Use the 6-digit code below to verify your email address:
+      </p>
+      <div class="otp">{{ .Token }}</div>
+      <p class="message">
+        This code will expire in a few minutes. Please do not share it with anyone.
+      </p>
+      <div class="footer">
+        &copy; Ellena App. All rights reserved.
+      </div>
+    </div>
+  </body>
+</html>
+```
 
-1. Go to Authentication > URL Configuration.
-2. Set the Site URL to your application's URL.
+4. Click **Save** to update your email template.
+
+### 3. Configure Additional Settings
+
+1. Go to **Authentication** → **URL Configuration**.
+2. Set the **Site URL** to your application's URL.
 3. Add any additional redirect URLs if needed.
-
 
 ## Required Secrets
 
