@@ -7,9 +7,24 @@ A modern and minimal logo for **Ell-ena**, an AI-powered teammate that makes man
 - **Simplicity:** Clean, minimal design for modern UI and documentation.
 - **Trust & Collaboration:** Balanced lines evoke a reliable teammate.
 
-## Variants Included
-| Type | Files |
-|------|-------|
-| **Full Color** | `svg/ell-ena-color.svg`, `png/ell-ena-color-transparent-2000.png` |
-| **Monochrome Black** | `svg/ell-ena-black.svg`, `png/ell-ena-black-2000.png` |
-| **Icon Only** | `svg/ell-ena-icon.svg`, `png/ell-ena-icon-512.png` |
+## Available Files
+
+### Black & White Versions
+- **black-and-white-logo.png** — Simple black and white logo (icon only)
+- **black-and-white-logo-with-name.png** — Black and white logo with the "Ell-ena" name
+
+### Dark Mode Versions
+- **dark-logo.png** — Dark background optimized logo (icon only)
+- **dark-logo-with-name.png** — Dark logo with the "Ell-ena" name
+
+### Light Mode Versions
+- **light-logo.png** — Light background optimized logo (icon only)
+- **light-logo-with-name.png** — Light logo with the "Ell-ena" name
+
+### Background Removed Versions
+- **bg-logo.png** — Logo without background (transparent PNG)
+- **bg-logo-with-name.png** — Transparent logo with the "Ell-ena" name
+
+### SVG (Vector) Files
+- **ell-ena-black.svg** — Black version of the Ell-ena logo (vector format)
+- **ell-ena.svg** — Primary Ell-ena logo (vector format)
