@@ -564,17 +564,9 @@ class SupabaseService {
         };
       }
       
-      // Verify the OTP token based on the type
-      final OtpType otpType;
-      if (type == 'reset_password') {
-        otpType = OtpType.recovery;
-      } else {
-        otpType = OtpType.signup;
-      }
-      
       final response = await _client.auth.verifyOTP(
-        token: token,
-        type: otpType,
+        token: token.trim(),
+        type: OtpType.email, // Using email type for all OTP verifications
         email: email,
       );
       
