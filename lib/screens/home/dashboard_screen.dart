@@ -34,6 +34,8 @@ class _DashboardScreenState extends State<DashboardScreen>
   List<Map<String, dynamic>> _recentTasks = [];
   List<Map<String, dynamic>> _recentTickets = [];
   List<FlSpot> _taskCompletionSpots = [];
+  List<FlSpot> _taskCompletionSpotsMonth = [];   // MONTHLY
+
   List<Map<String, dynamic>> _upcomingItems = [];
 
   @override
@@ -223,30 +225,50 @@ class _DashboardScreenState extends State<DashboardScreen>
       _tasksInProgress = tasks.where((t) => t['status'] == 'in_progress').length;
       _tasksCompleted = tasks.where((t) => t['status'] == 'completed').length;
 
-      // Build completion series for last 7 days
+            // ---------- WEEKLY (last 7 days) ----------
       final now = DateTime.now();
-      final Map<int, int> dayIndexToCompleted = {for (var i = 0; i < 7; i++) i: 0};
+      final Map<int, int> weekly = {for (var i = 0; i < 7; i++) i: 0};
+
       for (final t in tasks) {
         if (t['status'] == 'completed') {
           final ts = (t['updated_at'] ?? t['created_at'])?.toString();
-          if (ts != null) {
-            final updated = DateTime.tryParse(ts);
-            if (updated != null) {
-              final diffDays = now
-                  .difference(DateTime(updated.year, updated.month, updated.day))
-                  .inDays;
-              if (diffDays >= 0 && diffDays < 7) {
-                final idx = 6 - diffDays; // earlier days on the left
-                dayIndexToCompleted[idx] = (dayIndexToCompleted[idx] ?? 0) + 1;
-              }
+          final date = DateTime.tryParse(ts ?? '');
+          if (date != null) {
+            final diff = now.difference(DateTime(date.year, date.month, date.day)).inDays;
+            if (diff >= 0 && diff < 7) {
+              weekly[6 - diff] = (weekly[6 - diff] ?? 0) + 1;
             }
           }
         }
       }
+
       _taskCompletionSpots = List.generate(
         7,
-        (i) => FlSpot(i.toDouble(), (dayIndexToCompleted[i] ?? 0).toDouble()),
+        (i) => FlSpot(i.toDouble(), (weekly[i] ?? 0).toDouble()),
       );
+
+
+      // ---------- MONTHLY (last 30 days) ----------
+      final Map<int, int> monthly = {for (var i = 0; i < 30; i++) i: 0};
+
+      for (final t in tasks) {
+        if (t['status'] == 'completed') {
+          final ts = (t['updated_at'] ?? t['created_at'])?.toString();
+          final date = DateTime.tryParse(ts ?? '');
+          if (date != null) {
+            final diff = now.difference(DateTime(date.year, date.month, date.day)).inDays;
+            if (diff >= 0 && diff < 30) {
+              monthly[29 - diff] = (monthly[29 - diff] ?? 0) + 1;
+            }
+          }
+        }
+      }
+
+      _taskCompletionSpotsMonth = List.generate(
+        30,
+        (i) => FlSpot(i.toDouble(), (monthly[i] ?? 0).toDouble()),
+      );
+
 
       _ticketsOpen = tickets.where((t) => t['status'] == 'open').length;
       _ticketsInProgress = tickets.where((t) => t['status'] == 'in_progress').length;
@@ -853,13 +875,14 @@ class _DashboardScreenState extends State<DashboardScreen>
                             getTitlesWidget: (value, meta) {
                               final now = DateTime.now();
                               final idx = value.toInt();
-                              if (idx < 0 || idx > 6) return const SizedBox();
-                              final day = now.subtract(Duration(days: 6 - idx));
+                              if (idx < 0 || idx > 29) return const SizedBox();
+
+                              final day = now.subtract(Duration(days: 29 - idx));
                               return Text(
-                                DateFormat('E').format(day),
+                                DateFormat('d').format(day), // show date number like 12, 13, 14...
                                 style: TextStyle(
                                   color: Colors.grey.shade400,
-                                  fontSize: 12,
+                                  fontSize: 10,
                                 ),
                               );
                             },
@@ -875,7 +898,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                       borderData: FlBorderData(show: false),
                       lineBarsData: [
                         LineChartBarData(
-                          spots: _taskCompletionSpots,
+                          spots: _taskCompletionSpotsMonth,  // ✅ USE MONTH DATA
                           isCurved: true,
                           color: Colors.green.shade400,
                           barWidth: 3,
