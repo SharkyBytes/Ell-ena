@@ -288,43 +288,52 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
   
   Widget _buildTextField({
-    required TextEditingController controller,
-    required String label,
-    required IconData icon,
-    bool enabled = true,
-    String? helperText,
-    String? Function(String?)? validator,
-  }) {
-    return TextFormField(
-      controller: controller,
-      enabled: enabled,
-      validator: validator,
-      style: const TextStyle(color: Colors.white),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: TextStyle(color: Colors.grey.shade400),
-        helperText: helperText,
-        helperStyle: TextStyle(color: Colors.grey.shade600),
-        prefixIcon: Icon(icon, color: Colors.grey.shade400),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey.shade800),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey.shade800),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.green.shade400),
-        ),
-        disabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey.shade900),
-        ),
-        filled: true,
-        fillColor: const Color(0xFF2D2D2D),
+  required TextEditingController controller,
+  required String label,
+  required IconData icon,
+  bool enabled = true,
+  String? helperText,
+  String? Function(String?)? validator,
+}) {
+  return TextFormField(
+    controller: controller,
+    enabled: enabled,
+    validator: validator,
+    style: TextStyle(
+      color: enabled ? Colors.white : Colors.grey.shade500,
+    ),
+    decoration: InputDecoration(
+      labelText: label,
+      labelStyle: TextStyle(
+        color: enabled ? Colors.grey.shade400 : Colors.grey.shade600,
       ),
-    );
-  }
-} 
+      helperText: helperText,
+      helperStyle: TextStyle(color: Colors.grey.shade600),
+      prefixIcon: Icon(
+        icon,
+        color: enabled ? Colors.grey.shade400 : Colors.grey.shade600,
+      ),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: Colors.grey.shade800),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: Colors.grey.shade800),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: Colors.green.shade400),
+      ),
+      disabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: Colors.grey.shade900),
+      ),
+      filled: true,
+      fillColor: enabled
+          ? const Color(0xFF2D2D2D)
+          : const Color(0xFF1F1F1F),
+    ),
+  );
+}
+}
