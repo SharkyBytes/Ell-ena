@@ -159,7 +159,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Scheduled jobs for bot automation (idempotent version)
+-- Scheduled jobs for bot automation
+-- Note: IF EXISTS checks allow safe re-running during development/debugging
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'start-bot') THEN
@@ -182,7 +183,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Idempotent cron job for cleanup
+-- Cleanup cron job
+-- Note: IF EXISTS check allows safe re-running during development/debugging
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'delete-old-meetings') THEN
