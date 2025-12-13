@@ -5,6 +5,7 @@ import '../../services/supabase_service.dart';
 import '../home/home_screen.dart';
 import 'signup_screen.dart';
 import 'forgot_password_screen.dart';
+import 'team_selection_dialog.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -71,7 +72,7 @@ class _LoginScreenState extends State<LoginScreen>
         email: _emailController.text,
         password: _passwordController.text,
       );
-      
+
       if (response.user != null) {
         if (mounted) {
           NavigationService().navigateToReplacement(const HomeScreen());
@@ -90,6 +91,53 @@ class _LoginScreenState extends State<LoginScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _handleGoogleSignIn() async {
+    setState(() => _isLoading = true);
+
+    try {
+      final result = await _supabaseService.signInWithGoogle();
+
+      if (mounted) {
+        if (result['success'] == true) {
+          if (result['isNewUser'] == true) {
+            // New user - show team selection dialog
+            showDialog(
+              context: context,
+              barrierDismissible: false,
+              builder: (context) => TeamSelectionDialog(
+                userEmail: result['email'] ?? '',
+                googleRefreshToken: result['googleRefreshToken'],
+              ),
+            );
+          } else {
+            // Existing user - go to home
+            NavigationService().navigateToReplacement(const HomeScreen());
+          }
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result['error'] ?? 'Google sign-in failed'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } finally {
@@ -166,6 +214,59 @@ class _LoginScreenState extends State<LoginScreen>
                     text: 'Sign In',
                     onPressed: _isLoading ? null : _handleLogin,
                     isLoading: _isLoading,
+                  ),
+                  const SizedBox(height: 24),
+                  // OR divider
+                  Row(
+                    children: [
+                      Expanded(child: Divider(color: Colors.grey.shade700)),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Text(
+                          'OR',
+                          style: TextStyle(
+                            color: Colors.grey.shade500,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      Expanded(child: Divider(color: Colors.grey.shade700)),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  // Google Sign-In Button
+                  OutlinedButton.icon(
+                    onPressed: _isLoading ? null : _handleGoogleSignIn,
+                    icon: Image.asset(
+                      'ELL-ena-logo/oauth-google-logo.png',
+                      height: 24,
+                      width: 24,
+                      errorBuilder: (context, error, stackTrace) {
+                        return const Icon(
+                          Icons.g_mobiledata,
+                          color: Colors.white,
+                          size: 28,
+                        );
+                      },
+                    ),
+                    label: const Text(
+                      'Sign in with Google',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      side: BorderSide(color: Colors.green.shade400, width: 2),
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 16,
+                        horizontal: 24,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 16),
                   Row(
