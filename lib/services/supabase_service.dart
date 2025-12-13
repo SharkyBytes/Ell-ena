@@ -353,7 +353,7 @@ class SupabaseService {
       // Step 3: Create the team with retry on duplicate
       Map<String, dynamic>? teamResponse;
       int insertAttempts = 0;
-      
+
       while (teamResponse == null && insertAttempts < 3) {
         try {
           final teamInsertResponse = await _client.from('teams').insert({
@@ -373,7 +373,8 @@ class SupabaseService {
             // Generate new team code and retry
             teamId = generateTeamId();
             insertAttempts++;
-            debugPrint('Duplicate team code detected, retrying with new code...');
+            debugPrint(
+                'Duplicate team code detected, retrying with new code...');
           } else {
             rethrow;
           }
@@ -510,61 +511,104 @@ class SupabaseService {
         };
       }
 
+      final redirectUrl = dotenv.env['OAUTH_REDIRECT_URL'] ??
+          'io.supabase.ellena://login-callback';
+
+      // Create a completer to wait for auth state change
+      final completer = Completer<Map<String, dynamic>>();
+      StreamSubscription<AuthState>? authSubscription;
+
+      // Listen to auth state changes
+      authSubscription = _client.auth.onAuthStateChange.listen((data) {
+        final event = data.event;
+        final session = data.session;
+
+        if (event == AuthChangeEvent.signedIn && session != null) {
+          final user = session.user;
+
+          // Process the authenticated user
+          _processAuthenticatedUser(user, session).then((result) {
+            authSubscription?.cancel();
+            if (!completer.isCompleted) {
+              completer.complete(result);
+            }
+          });
+        }
+      });
+
       final response = await _client.auth.signInWithOAuth(
         OAuthProvider.google,
-        redirectTo: 'io.supabase.ellena://login-callback/',
+        redirectTo: redirectUrl,
         authScreenLaunchMode: LaunchMode.externalApplication,
+        queryParams: const {
+          'access_type': 'offline',
+          'prompt': 'consent',
+        },
       );
 
-      if (response) {
-        // Wait for auth state to settle with retry mechanism
-        User? user;
-        for (int i = 0; i < 10; i++) {
-          await Future.delayed(const Duration(milliseconds: 500));
-          user = _client.auth.currentUser;
-          if (user != null) break;
-        }
-
-        if (user != null) {
-          // Check if user already has a profile (existing user)
-          final existingProfile = await _client
-              .from('users')
-              .select('id')
-              .eq('id', user.id)
-              .maybeSingle();
-
-          if (existingProfile != null) {
-            // Existing user - navigate to home
-            return {
-              'success': true,
-              'isNewUser': false,
-              'email': user.email,
-            };
-          } else {
-            // New user - needs team setup
-            // Extract refresh token for Google Calendar API
-            final session = _client.auth.currentSession;
-            final googleRefreshToken = session?.providerRefreshToken;
-
-            return {
-              'success': true,
-              'isNewUser': true,
-              'email': user.email,
-              'googleRefreshToken': googleRefreshToken,
-            };
-          }
-        }
+      if (!response) {
+        await authSubscription.cancel();
+        return {
+          'success': false,
+          'error': 'Failed to launch Google sign-in',
+        };
       }
 
-      return {
-        'success': false,
-        'error': 'Authentication cancelled',
-      };
+      // Wait for auth state change with timeout
+      return await completer.future.timeout(
+        const Duration(seconds: 60),
+        onTimeout: () {
+          authSubscription?.cancel();
+          return {
+            'success': false,
+            'error': 'Authentication timed out',
+          };
+        },
+      );
     } catch (e) {
       debugPrint('Error signing in with Google: $e');
       return {
         'success': false,
         'error': e.toString(),
+      };
+    }
+  }
+
+  // Helper method to process authenticated user
+  Future<Map<String, dynamic>> _processAuthenticatedUser(
+      User user, Session session) async {
+    try {
+      // Check if user already has a profile (existing user)
+      final existingProfile = await _client
+          .from('users')
+          .select('id')
+          .eq('id', user.id)
+          .maybeSingle();
+
+      if (existingProfile != null) {
+        // Existing user - navigate to home
+        return {
+          'success': true,
+          'isNewUser': false,
+          'email': user.email,
+        };
+      } else {
+        // New user - needs team setup
+        // Extract refresh token for Google Calendar API
+        final googleRefreshToken = session.providerRefreshToken;
+
+        return {
+          'success': true,
+          'isNewUser': true,
+          'email': user.email,
+          'googleRefreshToken': googleRefreshToken,
+        };
+      }
+    } catch (e) {
+      debugPrint('Error processing authenticated user: $e');
+      return {
+        'success': false,
+        'error': 'Failed to process authentication',
       };
     }
   }
@@ -589,6 +633,15 @@ class SupabaseService {
         return {
           'success': false,
           'error': 'User not authenticated',
+        };
+      }
+
+      final authedEmail = user.email;
+      if (authedEmail == null ||
+          authedEmail.toLowerCase() != email.toLowerCase()) {
+        return {
+          'success': false,
+          'error': 'Email mismatch for authenticated user',
         };
       }
 
@@ -625,7 +678,7 @@ class SupabaseService {
       await _client.from('users').insert({
         'id': user.id,
         'full_name': fullName,
-        'email': email,
+        'email': authedEmail,
         'team_id': teamIdUuid,
         'role': 'member',
         'google_refresh_token': googleRefreshToken,
@@ -667,6 +720,15 @@ class SupabaseService {
         };
       }
 
+      final authedEmail = user.email;
+      if (authedEmail == null ||
+          authedEmail.toLowerCase() != email.toLowerCase()) {
+        return {
+          'success': false,
+          'error': 'Email mismatch for authenticated user',
+        };
+      }
+
       final userId = user.id;
 
       // Generate a unique team ID
@@ -698,7 +760,7 @@ class SupabaseService {
       // Create the team with retry on duplicate
       Map<String, dynamic>? teamResponse;
       int insertAttempts = 0;
-      
+
       while (teamResponse == null && insertAttempts < 3) {
         try {
           final teamInsertResponse = await _client.from('teams').insert({
@@ -706,7 +768,7 @@ class SupabaseService {
             'team_code': teamId,
             'created_by': userId,
             'admin_name': adminName,
-            'admin_email': email,
+            'admin_email': authedEmail,
           }).select();
 
           teamResponse =
@@ -718,7 +780,8 @@ class SupabaseService {
             // Generate new team code and retry
             teamId = generateTeamId();
             insertAttempts++;
-            debugPrint('Duplicate team code detected, retrying with new code...');
+            debugPrint(
+                'Duplicate team code detected, retrying with new code...');
           } else {
             rethrow;
           }
@@ -733,7 +796,7 @@ class SupabaseService {
       await _client.from('users').insert({
         'id': userId,
         'full_name': adminName,
-        'email': email,
+        'email': authedEmail,
         'team_id': teamResponse['id'],
         'role': 'admin',
         'google_refresh_token': googleRefreshToken,
