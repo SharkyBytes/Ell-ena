@@ -342,27 +342,46 @@ class SupabaseService {
           isUnique = response == false;
         } catch (e) {
           debugPrint('Error checking team code: $e');
-          // If we can't check, assume it's unique after 3 attempts
+          // If RPC consistently fails, throw error instead of risking duplicates
           if (attempts >= 3) {
-            isUnique = true;
+            throw Exception(
+                'Unable to verify team code uniqueness. Please try again.');
           }
         }
       } while (!isUnique && attempts < 10);
 
-      // Step 3: Create the team
-      final teamInsertResponse = await _client.from('teams').insert({
-        'name': teamName,
-        'team_code': teamId,
-        'created_by': userId,
-        'admin_name': adminName,
-        'admin_email': adminEmail,
-      }).select();
+      // Step 3: Create the team with retry on duplicate
+      Map<String, dynamic>? teamResponse;
+      int insertAttempts = 0;
+      
+      while (teamResponse == null && insertAttempts < 3) {
+        try {
+          final teamInsertResponse = await _client.from('teams').insert({
+            'name': teamName,
+            'team_code': teamId,
+            'created_by': userId,
+            'admin_name': adminName,
+            'admin_email': adminEmail,
+          }).select();
 
-      final teamResponse =
-          teamInsertResponse.isNotEmpty ? teamInsertResponse.first : null;
+          teamResponse =
+              teamInsertResponse.isNotEmpty ? teamInsertResponse.first : null;
+        } catch (e) {
+          // Check if it's a duplicate key error
+          if (e.toString().contains('duplicate') ||
+              e.toString().contains('unique')) {
+            // Generate new team code and retry
+            teamId = generateTeamId();
+            insertAttempts++;
+            debugPrint('Duplicate team code detected, retrying with new code...');
+          } else {
+            rethrow;
+          }
+        }
+      }
 
       if (teamResponse == null) {
-        throw Exception('Failed to create team');
+        throw Exception('Failed to create team after multiple attempts');
       }
 
       // Step 4: Update user profile
@@ -668,26 +687,46 @@ class SupabaseService {
           isUnique = response == false;
         } catch (e) {
           debugPrint('Error checking team code: $e');
+          // If RPC consistently fails, throw error instead of risking duplicates
           if (attempts >= 3) {
-            isUnique = true;
+            throw Exception(
+                'Unable to verify team code uniqueness. Please try again.');
           }
         }
       } while (!isUnique && attempts < 10);
 
-      // Create the team
-      final teamInsertResponse = await _client.from('teams').insert({
-        'name': teamName,
-        'team_code': teamId,
-        'created_by': userId,
-        'admin_name': adminName,
-        'admin_email': email,
-      }).select();
+      // Create the team with retry on duplicate
+      Map<String, dynamic>? teamResponse;
+      int insertAttempts = 0;
+      
+      while (teamResponse == null && insertAttempts < 3) {
+        try {
+          final teamInsertResponse = await _client.from('teams').insert({
+            'name': teamName,
+            'team_code': teamId,
+            'created_by': userId,
+            'admin_name': adminName,
+            'admin_email': email,
+          }).select();
 
-      final teamResponse =
-          teamInsertResponse.isNotEmpty ? teamInsertResponse.first : null;
+          teamResponse =
+              teamInsertResponse.isNotEmpty ? teamInsertResponse.first : null;
+        } catch (e) {
+          // Check if it's a duplicate key error
+          if (e.toString().contains('duplicate') ||
+              e.toString().contains('unique')) {
+            // Generate new team code and retry
+            teamId = generateTeamId();
+            insertAttempts++;
+            debugPrint('Duplicate team code detected, retrying with new code...');
+          } else {
+            rethrow;
+          }
+        }
+      }
 
       if (teamResponse == null) {
-        throw Exception('Failed to create team');
+        throw Exception('Failed to create team after multiple attempts');
       }
 
       // Create user profile
