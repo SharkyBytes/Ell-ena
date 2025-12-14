@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../../widgets/custom_widgets.dart';
 import '../../services/navigation_service.dart';
 import '../../services/supabase_service.dart';
@@ -422,17 +422,9 @@ class _SignupScreenState extends State<SignupScreen>
         Center(
           child: OutlinedButton.icon(
             onPressed: _isLoading ? null : _handleGoogleSignIn,
-            icon: Image.asset(
-              'ELL-ena-logo/oauth-google-logo.png',
-              height: 24,
-              width: 24,
-              errorBuilder: (context, error, stackTrace) {
-                return const Icon(
-                  Icons.g_mobiledata,
-                  color: Colors.white,
-                  size: 28,
-                );
-              },
+            icon: const FaIcon(
+              FontAwesomeIcons.google,
+              size: 20,
             ),
             label: const Text(
               'Sign up with Google',

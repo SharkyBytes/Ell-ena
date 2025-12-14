@@ -269,17 +269,6 @@ Supabase provides built-in authentication. The project uses email-based authenti
    ```
 3. Click **Save**
 
-#### Step 4: Database Schema Update
-
-Run this SQL in your Supabase SQL Editor to add Google refresh token support:
-
-```sql
-ALTER TABLE users
-ADD COLUMN IF NOT EXISTS google_refresh_token TEXT;
-
-COMMENT ON COLUMN users.google_refresh_token IS 'Google OAuth refresh token for Calendar API access';
-```
-
 ### 3. Configure OTP Email Template
 
 1. Go to **Authentication** → **Emails** in your Supabase project.
