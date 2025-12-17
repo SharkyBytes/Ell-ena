@@ -323,8 +323,7 @@ Supabase provides built-in authentication. The project uses email-based authenti
       </p>
       <div class="otp">{{ .Token }}</div>
       <p class="message">
-        This code will expire in a few minutes. Please do not share it with
-        anyone.
+        This code will expire in a few minutes. Please do not share it with anyone.
       </p>
       <div class="footer">&copy; Ellena App. All rights reserved.</div>
     </div>
@@ -439,3 +438,4 @@ After setting up your backend:
 ---
 
 This guide should help you get started with the Ell-ena backend.
+
